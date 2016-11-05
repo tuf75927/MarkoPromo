@@ -85,12 +85,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
         }
 
-        messageList = populateMessageList();
+        PromoMessage testMessage = new PromoMessage("testMessage.txt", getApplicationContext());
+        addMessage(testMessage);
 
-        /*
-        PromoMessage testMessage = new PromoMessage("testMessage3.txt", getApplicationContext());
-        addMessageToList(testMessage);
-        */
+        messageList = new ArrayList<String>();
+        populateMessageList();
 
         //Toast toast = Toast.makeText(this, this.getFilesDir().toString(), Toast.LENGTH_LONG);
         //toast.show();
@@ -134,21 +133,26 @@ public class SavedMessagesActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    private ArrayList<String> populateMessageList() {
+    private void populateMessageList() {
+        messageList.clear();
         String[] fileList = this.fileList();
-        ArrayList<String> messageList = new ArrayList<String>();
 
         for(String s : fileList) {
             if (!s.equals("instant-run"))
                 messageList.add(s);
         }
-
-        return messageList;
     }
 
-    private void addMessageToList(PromoMessage message) {
-        messageList.add(message.getFileName());
+    private void addMessage(PromoMessage message) {
         message.save();
+    }
+
+    private void deleteAllMessages() {
+        String[] fileList = this.fileList();
+
+        for(String s : fileList) {
+            deleteFile(s);
+        }
     }
 
     private void scanLeDevice(final boolean enable) {
