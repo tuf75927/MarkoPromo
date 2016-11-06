@@ -17,9 +17,12 @@ import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.Criteria;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
@@ -47,8 +50,10 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private ScanSettings settings;
     private BluetoothGatt mGatt;
     private BluetoothLeScanner mLEScanner;
+    private LocationManager locationManager;
 
     private final static int REQUEST_ENABLE_BT = 1;
+    private final static int REQUEST_ENABLE_LOC = 2;
     private static final long SCAN_PERIOD = 20000; // 20 seconds
 
     private ArrayList<String> messageList;
@@ -90,6 +95,18 @@ public class SavedMessagesActivity extends AppCompatActivity {
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
         }
+
+        /*
+        locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+        Criteria locationCriteria = new Criteria();
+        locationCriteria.setAccuracy(Criteria.ACCURACY_FINE);
+        String providerName = locationManager.getBestProvider(locationCriteria, true);
+
+        // Turns on location (GPS)
+        if (locationManager == null || !locationManager.isProviderEnabled(providerName)) {
+            Intent enableLocIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
+        } */
 
         demo();
 
