@@ -1,5 +1,6 @@
 package edu.temple.markopromo;
 
+import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -33,12 +34,14 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.GridView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class SavedMessagesActivity extends AppCompatActivity {
@@ -51,10 +54,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private BluetoothGatt mGatt;
     private BluetoothLeScanner mLEScanner;
     private LocationManager locationManager;
+    private ArrayAdapter<String> gridViewArrayAdapter;
 
     private final static int REQUEST_ENABLE_BT = 1;
     private final static int REQUEST_ENABLE_LOC = 2;
-    private static final long SCAN_PERIOD = 20000; // 20 seconds
+    private static final long SCAN_PERIOD = 60000; // 60 seconds
 
     private ArrayList<String> messageList;
 
@@ -86,9 +90,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
         mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
         mHandler = new Handler();
         settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setScanMode(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
                 .build();
         filters = new ArrayList<ScanFilter>();
+        ScanFilter filter = new ScanFilter.Builder().setDeviceName("mpromo").build();
+        filters.add(filter);
 
         // Turns on Bluetooth
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
@@ -108,15 +114,26 @@ public class SavedMessagesActivity extends AppCompatActivity {
             startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
         } */
 
+        requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_ENABLE_LOC);
+        //Intent enableLocIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+        //startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
+
         demo();
 
         messageList = new ArrayList<String>();
         populateMessageList();
 
         GridView gridView = (GridView) findViewById(R.id.message_gridview);
-        final ArrayAdapter<String> gridViewArrayAdapter = new ArrayAdapter<String>
-                (this,android.R.layout.simple_list_item_1, messageList);
+        gridViewArrayAdapter = new ArrayAdapter<String>
+                (this, android.R.layout.simple_list_item_1, messageList);
         gridView.setAdapter(gridViewArrayAdapter);
+
+        //String[] mL = new String[messageList.size()];
+        //for(int i = 0; i < messageList.size(); i++) {
+        //    mL[i] = messageList.get(i);
+        //}
+
+        //MessageGridViewAdapter mgva = new MessageGridViewAdapter(this, android.R.layout.simple_list_item_1, mL);
 
         gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -128,6 +145,21 @@ public class SavedMessagesActivity extends AppCompatActivity {
             }
         });
 
+        Button scanButton = (Button) findViewById(R.id.scan_button);
+
+        scanButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Button button = (Button) view;
+                if(button.getText().equals("Scan")) {
+                    scanLeDevice(true);
+                    button.setText("Stop");
+                } else {
+                    scanLeDevice(false);
+                    button.setText("Scan");
+                }
+            }
+        });
     }
 
     @Override
@@ -142,7 +174,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
                     .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                     .build();
             filters = new ArrayList<ScanFilter>();
-            scanLeDevice(true);
+            //scanLeDevice(true);
         }
     }
 
@@ -211,17 +243,19 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private void scanLeDevice(final boolean enable) {
         if (enable) {
             // Stops scanning after a pre-defined scan period.
-            mHandler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    mScanning = false;
-                    mLEScanner.stopScan(mScanCallback);
-                }
-            }, SCAN_PERIOD);
+            //mHandler.postDelayed(new Runnable() {
+            //    @Override
+            //    public void run() {
+            //        mScanning = false;
+            //        mLEScanner.stopScan(mScanCallback);
+            //    }
+            //}, SCAN_PERIOD);
 
             mScanning = true;
             mLEScanner.startScan(filters, settings, mScanCallback);
             Log.i("scanLeDevice", "enable");
+            //Toast toast = Toast.makeText(getApplicationContext(), "scanLeDevice", Toast.LENGTH_SHORT);
+            //toast.show();
         } else {
             mScanning = false;
             mLEScanner.stopScan(mScanCallback);
@@ -232,19 +266,44 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private ScanCallback mScanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
-            Toast toast = Toast.makeText(getApplicationContext(), "mScanCallback", Toast.LENGTH_SHORT);
-            toast.show();
+            //Toast toast = Toast.makeText(getApplicationContext(), "mScanCallback", Toast.LENGTH_SHORT);
+            //toast.show();
 
             Log.i("callbackType", String.valueOf(callbackType));
             Log.i("result", result.toString());
             BluetoothDevice btDevice = result.getDevice();
 
             ScanRecord record = result.getScanRecord();
-            byte[] byteArray = record.getBytes();
-            String s = new String(byteArray);
-            Log.i("recordByteArrayString", s);
+            String devName = record.getDeviceName();
+            //String devName = result.getDevice().getName();
 
-            connectToDevice(btDevice);
+            //devName = "." + devName + ".";
+            if(devName != null) {
+                Log.i("deviceName", devName);
+            } else {
+                Log.i("deviceName", "null");
+            }
+
+            byte[] byteArray = record.getBytes();
+            //Log.i("Arrays.toString", Arrays.toString(byteArray));
+            //String s = new String(byteArray);
+            //Log.i("recordByteArrayString", s);
+
+            Log.i("bytesToHex", bytesToHex(byteArray));
+
+            ScanFilter filter = new ScanFilter.Builder().setDeviceName("mpromo").build();
+
+            if(filter.matches(result)) {
+                Log.i("matches", "true");
+                PromoMessage message = new PromoMessage(bytesToHex(byteArray), getApplicationContext());
+                addMessage(message);
+                populateMessageList();
+                GridView gridView = (GridView) findViewById(R.id.message_gridview);
+                gridView.setAdapter(gridViewArrayAdapter);
+                gridViewArrayAdapter.notifyDataSetChanged();
+            }
+
+            //connectToDevice(btDevice);
         }
 
         @Override
@@ -299,6 +358,20 @@ public class SavedMessagesActivity extends AppCompatActivity {
             gatt.disconnect();
         }
     };
+
+    private String bytesToHex(byte[] bytes) {
+        char[] hexArray = "0123456789ABCDEF".toCharArray();
+
+        char[] hexChars = new char[bytes.length * 2];
+
+        for(int i = 0; i < bytes.length; i++) {
+            int x = bytes[i] & 0xFF;
+            hexChars[i * 2] = hexArray[x >>> 4];
+            hexChars[i * 2 + 1] = hexArray[x & 0x0F];
+        }
+
+        return new String(hexChars);
+    }
 
     private void demo() {
         deleteAllMessages();
