@@ -1,6 +1,7 @@
 package edu.temple.markopromo;
 
 import android.Manifest;
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -77,25 +78,17 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private ArrayList<String> newMessageList;
     private ArrayList<String> savedMessageList;
 
-    private String[] extensions = {".txt", ".jpg"};
-    private String bucket = "mpmsg";
+    private static String bucket;
+    public static File directory;
+    public static final int DELETE_RESULT = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_saved_messages);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-
-        /*
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        }); */
 
         // checks if Bluetooth Low Energy supported by device
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
@@ -136,6 +129,9 @@ public class SavedMessagesActivity extends AppCompatActivity {
         //Intent enableLocIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
         //startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
 
+        bucket = "mpmsg";
+        directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+
         newMessageList = new ArrayList<String>();
         savedMessageList = new ArrayList<String>();
 
@@ -174,24 +170,6 @@ public class SavedMessagesActivity extends AppCompatActivity {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 String selectedItem = parent.getItemAtPosition(position).toString();
-
-                String fileLoc = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) + "/" + selectedItem;
-
-                //Toast toast = Toast.makeText(getApplicationContext(), fileLoc, Toast.LENGTH_SHORT);
-                //toast.show();
-
-                /*
-                Uri uri = Uri.parse("/storage/emulated/0/Android/data/edu.temple.markopromo/files/Pictures/Robyn_test1.jpg");
-                Intent openIntent = new Intent(Intent.ACTION_VIEW);
-                openIntent.setData(uri);
-                openIntent.setType("image/*");
-                openIntent.addCategory(Intent.CATEGORY_OPENABLE);
-                //openIntent.
-
-                if (openIntent.resolveActivity(getPackageManager()) != null) {
-                    startActivity(openIntent);
-                }
-                */
 
                 launchDisplayMessageActivity(selectedItem);
             }
@@ -280,10 +258,10 @@ public class SavedMessagesActivity extends AppCompatActivity {
         savedMessageList.clear();
         String[] fileList = this.fileList();
 
-        for(String s : fileList) {
-            if (!s.equals("instant-run"))
-                savedMessageList.add(s);
-        }
+        //for(String s : fileList) {
+        //    if (!s.equals("instant-run"))
+        //        savedMessageList.add(s);
+        //}
 
         //TODO: JSON file for persistence, tracking date
     }
@@ -420,8 +398,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private void handleNewMessage(String filename) {
         newMessageList.add(filename);
 
-        GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
-        newMsgGridView.setAdapter(newGridViewArrayAdapter);
+        //GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+        //newMsgGridView.setAdapter(newGridViewArrayAdapter);
         newGridViewArrayAdapter.notifyDataSetChanged();
 
         //PromoMessage message = new PromoMessage(filename, getApplicationContext());
@@ -494,7 +472,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
                     TransferUtility transferUtility = new TransferUtility(s3, getApplicationContext());
 
-                    File message = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), filename);
+                    File message = new File(directory, filename);
 
                     TransferObserver observer = transferUtility.download(bucket, filename, message);
 
@@ -510,12 +488,12 @@ public class SavedMessagesActivity extends AppCompatActivity {
                                 runOnUiThread(new Runnable() {
                                     @Override
                                     public void run() {
-                                        GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
-                                        savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
+                                        //GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
+                                        //savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
                                         savedGridViewArrayAdapter.notifyDataSetChanged();
 
-                                        GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
-                                        newMsgGridView.setAdapter(newGridViewArrayAdapter);
+                                        //GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+                                        //newMsgGridView.setAdapter(newGridViewArrayAdapter);
                                         newGridViewArrayAdapter.notifyDataSetChanged();
 
                                         launchDisplayMessageActivity(filename);
@@ -569,7 +547,22 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private void launchDisplayMessageActivity(String filename) {
         Intent displayIntent = new Intent(getApplicationContext(), DisplayMessageActivity.class);
         displayIntent.putExtra("filename", filename);
-        startActivity(displayIntent);
+        startActivityForResult(displayIntent, DELETE_RESULT);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+        if (requestCode == DELETE_RESULT) {
+            if(resultCode == DELETE_RESULT){
+                String fileToDelete = data.getStringExtra("fileToDelete");
+                savedMessageList.remove(fileToDelete);
+                savedGridViewArrayAdapter.notifyDataSetChanged();
+
+
+                //Grid
+            }
+        }
     }
 
     private void demo() {

@@ -1,5 +1,6 @@
 package edu.temple.markopromo;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
@@ -13,6 +14,7 @@ import android.util.Log;
 import android.view.Choreographer;
 import android.view.View;
 import android.webkit.WebView;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -26,9 +28,11 @@ import java.io.IOException;
 
 public class DisplayMessageActivity extends AppCompatActivity {
 
+    private String filename;
     private WebView fileWebView;
     private ImageView fileImageView;
     private FrameLayout frameLayout;
+    private Button deleteButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,7 +42,7 @@ public class DisplayMessageActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
 
         Bundle extras = getIntent().getExtras();
-        String filename = extras.getString("filename");
+        filename = extras.getString("filename");
 
         TextView filenameTextView = (TextView) findViewById(R.id.filename_textview);
         filenameTextView.setText(filename);
@@ -52,6 +56,15 @@ public class DisplayMessageActivity extends AppCompatActivity {
         } else {
             Toast.makeText(getApplicationContext(), "Unsupported file type!", Toast.LENGTH_SHORT).show();
         }
+
+        deleteButton = (Button) findViewById(R.id.delete_button);
+
+        deleteButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                deletePromo(filename);
+            }
+        });
     }
 
     private boolean isTextFile(String filename) {
@@ -89,7 +102,7 @@ public class DisplayMessageActivity extends AppCompatActivity {
     }
 
     private String readTextFile(String filename) {
-        File promoFile = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), filename);
+        File promoFile = new File(SavedMessagesActivity.directory, filename);
 
         String result = "";
 
@@ -125,7 +138,7 @@ public class DisplayMessageActivity extends AppCompatActivity {
     private void loadImageFile(String filename) {
         fileImageView = new ImageView(this);
 
-        File imgFile = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), filename);
+        File imgFile = new File(SavedMessagesActivity.directory, filename);
 
         if(imgFile.exists()){
             Bitmap myBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
@@ -133,5 +146,18 @@ public class DisplayMessageActivity extends AppCompatActivity {
         }
 
         frameLayout.addView(fileImageView);
+    }
+
+    private void deletePromo(String filename) {
+        File file = new File(SavedMessagesActivity.directory, filename);
+
+        if(file.delete()) {
+            Intent returnIntent = new Intent();
+            setResult(SavedMessagesActivity.DELETE_RESULT, returnIntent);
+            returnIntent.putExtra("fileToDelete", filename);
+            finish();
+        } else {
+            Toast.makeText(getApplicationContext(), "Delete failed!", Toast.LENGTH_SHORT).show();
+        }
     }
 }
