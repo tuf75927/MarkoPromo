@@ -1,9 +1,14 @@
 <resources>
     <string name="app_name">MarkoPromo</string>
     <string name="action_settings">Settings</string>
-    <string name="title_activity_display_message">DisplayMessageActivity</string>
+    <string name="title_activity_display_message">MarkoPromo</string>
 
     <string name="new_msg_textview">New Promos</string>
     <string name="saved_msg_textview">Saved Promos</string>
     <string name="scan_button">Scan</string>
+
+    <string name="back_button">Back</string>
+    <string name="delete_button">Delete</string>
+    <string name="filename_textview">Filename</string>
+
 </resources>

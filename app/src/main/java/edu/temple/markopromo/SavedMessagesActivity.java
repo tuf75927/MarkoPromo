@@ -136,11 +136,12 @@ public class SavedMessagesActivity extends AppCompatActivity {
         //Intent enableLocIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
         //startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
 
+        newMessageList = new ArrayList<String>();
+        savedMessageList = new ArrayList<String>();
+
         demo2();
 
-        newMessageList = new ArrayList<String>();
-        populateNewMessageList();
-        savedMessageList = new ArrayList<String>();
+        //populateNewMessageList();
         populateSavedMessageList();
 
         GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
@@ -174,19 +175,25 @@ public class SavedMessagesActivity extends AppCompatActivity {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 String selectedItem = parent.getItemAtPosition(position).toString();
 
-                String fileLoc = getExternalFilesDir(Environment.DIRECTORY_PICTURES) + "/" + selectedItem;
+                String fileLoc = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) + "/" + selectedItem;
 
                 //Toast toast = Toast.makeText(getApplicationContext(), fileLoc, Toast.LENGTH_SHORT);
                 //toast.show();
 
-                Uri uri = Uri.parse(fileLoc);
-                Intent openIntent = new Intent(Intent.ACTION_VIEW, uri);
+                /*
+                Uri uri = Uri.parse("/storage/emulated/0/Android/data/edu.temple.markopromo/files/Pictures/Robyn_test1.jpg");
+                Intent openIntent = new Intent(Intent.ACTION_VIEW);
+                openIntent.setData(uri);
                 openIntent.setType("image/*");
+                openIntent.addCategory(Intent.CATEGORY_OPENABLE);
                 //openIntent.
 
                 if (openIntent.resolveActivity(getPackageManager()) != null) {
                     startActivity(openIntent);
                 }
+                */
+
+                launchDisplayMessageActivity(selectedItem);
             }
         });
 
@@ -265,8 +272,6 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
     private void populateNewMessageList() {
         newMessageList.clear();
-
-        newMessageList.add("Robyn_test1.jpg");
 
         //TODO: JSON file for persistence, tracking date
     }
@@ -489,7 +494,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
                     TransferUtility transferUtility = new TransferUtility(s3, getApplicationContext());
 
-                    File message = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), filename);
+                    File message = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), filename);
 
                     TransferObserver observer = transferUtility.download(bucket, filename, message);
 
@@ -497,7 +502,34 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
                         @Override
                         public void onStateChanged(int id, TransferState state) {
-                            // do something
+                            Log.i("TransferState", state.toString());
+                            if(state.toString() == "COMPLETED") {
+                                savedMessageList.add(filename);
+                                newMessageList.remove(filename);
+
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
+                                        savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
+                                        savedGridViewArrayAdapter.notifyDataSetChanged();
+
+                                        GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+                                        newMsgGridView.setAdapter(newGridViewArrayAdapter);
+                                        newGridViewArrayAdapter.notifyDataSetChanged();
+
+                                        launchDisplayMessageActivity(filename);
+                                    }
+                                });
+                            }
+                            if(state.toString() =="FAILED") {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Toast.makeText(getApplicationContext(), "Error downloading " + filename, Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                            }
                         }
 
                         @Override
@@ -512,22 +544,6 @@ public class SavedMessagesActivity extends AppCompatActivity {
                                     Toast.makeText(getApplicationContext(), "Error downloading " + filename, Toast.LENGTH_SHORT).show();
                                 }
                             });
-                        }
-                    });
-
-                    savedMessageList.add(filename);
-                    newMessageList.remove(filename);
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
-                            savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
-                            savedGridViewArrayAdapter.notifyDataSetChanged();
-
-                            GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
-                            newMsgGridView.setAdapter(newGridViewArrayAdapter);
-                            newGridViewArrayAdapter.notifyDataSetChanged();
                         }
                     });
                 } else {
@@ -550,6 +566,12 @@ public class SavedMessagesActivity extends AppCompatActivity {
         return networkInfo != null && networkInfo.isConnected();
     }
 
+    private void launchDisplayMessageActivity(String filename) {
+        Intent displayIntent = new Intent(getApplicationContext(), DisplayMessageActivity.class);
+        displayIntent.putExtra("filename", filename);
+        startActivity(displayIntent);
+    }
+
     private void demo() {
         deleteAllMessages();
         PromoMessage testMessage = new PromoMessage("test_message.txt", getApplicationContext());
@@ -559,8 +581,12 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
     private void demo2() {
         deleteAllMessages();
-        PromoMessage testMessage = new PromoMessage("test_message.txt", getApplicationContext());
-        addMessage(testMessage);
+
+        populateNewMessageList();
+        newMessageList.add("Robyn_test1.jpg");
+        newMessageList.add("blinkenlights.txt");
+        newMessageList.add("345615.txt");
+
         Log.i("demo2Run", "true");
     }
 }
