@@ -20,7 +20,11 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Criteria;
 import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.provider.MediaStore;
 import android.provider.Settings;
@@ -39,6 +43,15 @@ import android.widget.GridView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.amazonaws.auth.AnonymousAWSCredentials;
+import com.amazonaws.mobileconnectors.s3.transferutility.TransferListener;
+import com.amazonaws.mobileconnectors.s3.transferutility.TransferObserver;
+import com.amazonaws.mobileconnectors.s3.transferutility.TransferState;
+import com.amazonaws.mobileconnectors.s3.transferutility.TransferUtility;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,13 +67,18 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private BluetoothGatt mGatt;
     private BluetoothLeScanner mLEScanner;
     private LocationManager locationManager;
-    private ArrayAdapter<String> gridViewArrayAdapter;
+    private ArrayAdapter<String> newGridViewArrayAdapter;
+    private ArrayAdapter<String> savedGridViewArrayAdapter;
 
     private final static int REQUEST_ENABLE_BT = 1;
     private final static int REQUEST_ENABLE_LOC = 2;
     private static final long SCAN_PERIOD = 60000; // 60 seconds
 
-    private ArrayList<String> messageList;
+    private ArrayList<String> newMessageList;
+    private ArrayList<String> savedMessageList;
+
+    private String[] extensions = {".txt", ".jpg"};
+    private String bucket = "mpmsg";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -118,15 +136,22 @@ public class SavedMessagesActivity extends AppCompatActivity {
         //Intent enableLocIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
         //startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
 
-        demo();
+        demo2();
 
-        messageList = new ArrayList<String>();
-        populateMessageList();
+        newMessageList = new ArrayList<String>();
+        populateNewMessageList();
+        savedMessageList = new ArrayList<String>();
+        populateSavedMessageList();
 
-        GridView gridView = (GridView) findViewById(R.id.message_gridview);
-        gridViewArrayAdapter = new ArrayAdapter<String>
-                (this, android.R.layout.simple_list_item_1, messageList);
-        gridView.setAdapter(gridViewArrayAdapter);
+        GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+        newGridViewArrayAdapter = new ArrayAdapter<String>
+                (this, android.R.layout.simple_list_item_1, newMessageList);
+        newMsgGridView.setAdapter(newGridViewArrayAdapter);
+
+        GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
+        savedGridViewArrayAdapter = new ArrayAdapter<String>
+                (this, android.R.layout.simple_list_item_1, savedMessageList);
+        savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
 
         //String[] mL = new String[messageList.size()];
         //for(int i = 0; i < messageList.size(); i++) {
@@ -135,13 +160,33 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
         //MessageGridViewAdapter mgva = new MessageGridViewAdapter(this, android.R.layout.simple_list_item_1, mL);
 
-        gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        newMsgGridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 String selectedItem = parent.getItemAtPosition(position).toString();
 
-                Toast toast = Toast.makeText(getApplicationContext(), selectedItem, Toast.LENGTH_SHORT);
-                toast.show();
+                downloadMessage(selectedItem);
+            }
+        });
+
+        savedMsgGridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                String selectedItem = parent.getItemAtPosition(position).toString();
+
+                String fileLoc = getExternalFilesDir(Environment.DIRECTORY_PICTURES) + "/" + selectedItem;
+
+                //Toast toast = Toast.makeText(getApplicationContext(), fileLoc, Toast.LENGTH_SHORT);
+                //toast.show();
+
+                Uri uri = Uri.parse(fileLoc);
+                Intent openIntent = new Intent(Intent.ACTION_VIEW, uri);
+                openIntent.setType("image/*");
+                //openIntent.
+
+                if (openIntent.resolveActivity(getPackageManager()) != null) {
+                    startActivity(openIntent);
+                }
             }
         });
 
@@ -218,14 +263,24 @@ public class SavedMessagesActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    private void populateMessageList() {
-        messageList.clear();
+    private void populateNewMessageList() {
+        newMessageList.clear();
+
+        newMessageList.add("Robyn_test1.jpg");
+
+        //TODO: JSON file for persistence, tracking date
+    }
+
+    private void populateSavedMessageList() {
+        savedMessageList.clear();
         String[] fileList = this.fileList();
 
         for(String s : fileList) {
             if (!s.equals("instant-run"))
-                messageList.add(s);
+                savedMessageList.add(s);
         }
+
+        //TODO: JSON file for persistence, tracking date
     }
 
     private void addMessage(PromoMessage message) {
@@ -295,12 +350,10 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
             if(filter.matches(result)) {
                 Log.i("matches", "true");
-                PromoMessage message = new PromoMessage(bytesToHex(byteArray), getApplicationContext());
-                addMessage(message);
-                populateMessageList();
-                GridView gridView = (GridView) findViewById(R.id.message_gridview);
-                gridView.setAdapter(gridViewArrayAdapter);
-                gridViewArrayAdapter.notifyDataSetChanged();
+                //PromoMessage message = new PromoMessage(bytesToHex(byteArray), getApplicationContext());
+                String filename = parseFileName(byteArray);
+                if(isNewPromo(filename))
+                    handleNewMessage(filename);
             }
 
             //connectToDevice(btDevice);
@@ -359,6 +412,37 @@ public class SavedMessagesActivity extends AppCompatActivity {
         }
     };
 
+    private void handleNewMessage(String filename) {
+        newMessageList.add(filename);
+
+        GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+        newMsgGridView.setAdapter(newGridViewArrayAdapter);
+        newGridViewArrayAdapter.notifyDataSetChanged();
+
+        //PromoMessage message = new PromoMessage(filename, getApplicationContext());
+        //addMessage(message);
+        //populateSavedMessageList();
+        //GridView gridView = (GridView) findViewById(R.id.new_msg_gridview);
+        //gridView.setAdapter(gridViewArrayAdapter);
+        //gridViewArrayAdapter.notifyDataSetChanged();
+    }
+
+        private boolean isNewPromo(String filename) {
+        boolean result = true;
+
+        for(String s : newMessageList) {
+            if(s.equalsIgnoreCase(filename))
+                result = false;
+        }
+
+        for(String s : savedMessageList) {
+            if(s.equalsIgnoreCase(filename))
+                result = false;
+        }
+
+        return result;
+    }
+
     private String bytesToHex(byte[] bytes) {
         char[] hexArray = "0123456789ABCDEF".toCharArray();
 
@@ -373,10 +457,110 @@ public class SavedMessagesActivity extends AppCompatActivity {
         return new String(hexChars);
     }
 
+    //private String bytesToString(byte[] bytes) {
+    //    return new String(bytes);
+    //}
+
+    private String parseFileName(byte[] bytes) {
+        String str = new String(bytes);
+        String[] tokens = str.split(":");
+        String name = tokens[1];
+        Log.i("tokens[0]", tokens[0]);
+        Log.i("name", name);
+
+        int periodLocation = 0;
+        for(int i = 0; i < name.length(); i++) {
+            if (name.charAt(i) == '.')
+                periodLocation = i;
+        }
+        Log.i("periodLocation", "" + periodLocation);
+        Log.i("nameTruncated", "*" + name.substring(0, periodLocation + 4) + "*");
+
+        return name.substring(0, periodLocation + 4);
+    }
+
+    private void downloadMessage(final String filename) {
+        Thread downloadMessageFile = new Thread() {
+            @Override
+            public void run() {
+
+                if (isNetworkActive()) {
+                    AmazonS3 s3 = new AmazonS3Client(new AnonymousAWSCredentials());
+
+                    TransferUtility transferUtility = new TransferUtility(s3, getApplicationContext());
+
+                    File message = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), filename);
+
+                    TransferObserver observer = transferUtility.download(bucket, filename, message);
+
+                    observer.setTransferListener(new TransferListener(){
+
+                        @Override
+                        public void onStateChanged(int id, TransferState state) {
+                            // do something
+                        }
+
+                        @Override
+                        public void onProgressChanged(int id, long bytesCurrent, long bytesTotal) {
+                        }
+
+                        @Override
+                        public void onError(int id, Exception ex) {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Toast.makeText(getApplicationContext(), "Error downloading " + filename, Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                        }
+                    });
+
+                    savedMessageList.add(filename);
+                    newMessageList.remove(filename);
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
+                            savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
+                            savedGridViewArrayAdapter.notifyDataSetChanged();
+
+                            GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+                            newMsgGridView.setAdapter(newGridViewArrayAdapter);
+                            newGridViewArrayAdapter.notifyDataSetChanged();
+                        }
+                    });
+                } else {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(getApplicationContext(), "Please connect to a network!", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+            }
+        };
+
+        downloadMessageFile.start();
+    }
+
+    private boolean isNetworkActive() {
+        ConnectivityManager connMgr = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
+        return networkInfo != null && networkInfo.isConnected();
+    }
+
     private void demo() {
         deleteAllMessages();
         PromoMessage testMessage = new PromoMessage("test_message.txt", getApplicationContext());
         addMessage(testMessage);
         Log.i("demoRun", "true");
+    }
+
+    private void demo2() {
+        deleteAllMessages();
+        PromoMessage testMessage = new PromoMessage("test_message.txt", getApplicationContext());
+        addMessage(testMessage);
+        Log.i("demo2Run", "true");
     }
 }
