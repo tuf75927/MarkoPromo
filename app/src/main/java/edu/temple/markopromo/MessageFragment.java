@@ -92,15 +92,12 @@ public class MessageFragment extends Fragment {
 
         frameLayout = (FrameLayout) vg.findViewById(R.id.message_frag_layout);
 
-        DisplayMessageActivity.setFilename(filename);
-
         if(isTextFile(filename)) {
             loadTextFile(filename);
         } else if (isImageFile(filename)) {
             loadImageFile(filename);
         } else {
             Toast.makeText(this.getContext(), "Unsupported file type!", Toast.LENGTH_SHORT).show();
-
         }
 
         return vg;

@@ -28,7 +28,7 @@ import java.util.ArrayList;
 
 public class DisplayMessageActivity extends AppCompatActivity implements MessageFragment.OnFragmentInteractionListener{
 
-    private static String filename;
+    private String filename;
     private ArrayList<String> filelist;
     private WebView fileWebView;
     private ImageView fileImageView;
@@ -108,7 +108,6 @@ public class DisplayMessageActivity extends AppCompatActivity implements Message
         @Override
         public Fragment getItem(int position) {
             Log.i("Frag_position", ""+position);
-            filename = filelist.get(position);
             return MessageFragment.create(position, filelist.get(position));
         }
 
@@ -116,9 +115,5 @@ public class DisplayMessageActivity extends AppCompatActivity implements Message
         public int getCount() {
             return filelist.size();
         }
-    }
-
-    protected static void setFilename(String name) {
-        filename = name;
     }
 }
