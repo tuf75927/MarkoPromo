@@ -30,7 +30,8 @@
         android:layout_centerHorizontal="true"
         android:layout_marginTop="@dimen/activity_horizontal_margin"
         android:text="@string/filename_textview"
-        android:textSize="24sp" />
+        android:textSize="24sp"
+        android:visibility="invisible"/>
 
     <Button
         android:id="@+id/delete_button"
@@ -48,15 +49,12 @@
         android:layout_below="@+id/back_button"
         android:layout_centerHorizontal="true">
 
-        <!--
-        <WebView
-            android:id="@+id/file_webview"
+        <android.support.v4.view.ViewPager
+            xmlns:android="http://schemas.android.com/apk/res/android"
+            android:id="@+id/pager"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginTop="@dimen/activity_horizontal_margin" />
-            -->
+            android:layout_height="match_parent" />
+
     </FrameLayout>
-
-
 
 </RelativeLayout>

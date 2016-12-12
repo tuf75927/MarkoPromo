@@ -9,6 +9,7 @@
 
     <string name="back_button">Back</string>
     <string name="delete_button">Delete</string>
+    <string name="delete_selected_button">Delete Selected</string>
     <string name="filename_textview">Filename</string>
 
 </resources>

@@ -1,36 +1,18 @@
 package edu.temple.markopromo;
 
 import android.Manifest;
-import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCallback;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.BluetoothLeScanner;
-import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanRecord;
-import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanSettings;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.location.Criteria;
-import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
-import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
-import android.os.Handler;
-import android.provider.MediaStore;
-import android.provider.Settings;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
+import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
@@ -41,7 +23,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.GridView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.amazonaws.auth.AnonymousAWSCredentials;
@@ -49,38 +30,32 @@ import com.amazonaws.mobileconnectors.s3.transferutility.TransferListener;
 import com.amazonaws.mobileconnectors.s3.transferutility.TransferObserver;
 import com.amazonaws.mobileconnectors.s3.transferutility.TransferState;
 import com.amazonaws.mobileconnectors.s3.transferutility.TransferUtility;
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 public class SavedMessagesActivity extends AppCompatActivity {
 
     private BluetoothAdapter mBluetoothAdapter;
-    private boolean mScanning;
-    private Handler mHandler;
-    private List<ScanFilter> filters;
-    private ScanSettings settings;
-    private BluetoothGatt mGatt;
-    private BluetoothLeScanner mLEScanner;
-    private LocationManager locationManager;
     private ArrayAdapter<String> newGridViewArrayAdapter;
     private ArrayAdapter<String> savedGridViewArrayAdapter;
 
     private final static int REQUEST_ENABLE_BT = 1;
     private final static int REQUEST_ENABLE_LOC = 2;
-    private static final long SCAN_PERIOD = 60000; // 60 seconds
 
-    private ArrayList<String> newMessageList;
-    private ArrayList<String> savedMessageList;
-
-    private static String bucket;
+    protected ArrayList<String> newMessageList;
+    protected ArrayList<String> savedMessageList;
+    private ArrayList<String> selectedMessageList;
     public static File directory;
+
+    private static final String bucket = "mpmsg";
     public static final int DELETE_RESULT = 1;
+    public static final String NEW_MSG_LIST_KEY = "new_msg_list_key";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,48 +71,32 @@ public class SavedMessagesActivity extends AppCompatActivity {
             finish();
         }
 
+        // Turns on Bluetooth
         final BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         mBluetoothAdapter = bluetoothManager.getAdapter();
-        mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
-        mHandler = new Handler();
-        settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.CALLBACK_TYPE_FIRST_MATCH)
-                .build();
-        filters = new ArrayList<ScanFilter>();
-        ScanFilter filter = new ScanFilter.Builder().setDeviceName("mpromo").build();
-        filters.add(filter);
-
-        // Turns on Bluetooth
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
         }
 
-        /*
-        locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
-        Criteria locationCriteria = new Criteria();
-        locationCriteria.setAccuracy(Criteria.ACCURACY_FINE);
-        String providerName = locationManager.getBestProvider(locationCriteria, true);
-
-        // Turns on location (GPS)
-        if (locationManager == null || !locationManager.isProviderEnabled(providerName)) {
-            Intent enableLocIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-            startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
-        } */
-
         requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_ENABLE_LOC);
-        //Intent enableLocIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-        //startActivityForResult(enableLocIntent, REQUEST_ENABLE_LOC);
 
-        bucket = "mpmsg";
-        directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        IntentFilter ifilter = new IntentFilter();
+        ifilter.addAction("ACTION_BROADCAST_FILENAME");
+        registerReceiver(receiver, ifilter);
+
+        Intent serviceIntent = new Intent(this, BluetoothScanService.class);
+        startService(serviceIntent);
+
+        directory = getFilesDir();
 
         newMessageList = new ArrayList<String>();
         savedMessageList = new ArrayList<String>();
 
-        demo2();
+        if (savedInstanceState != null) {
+            newMessageList = savedInstanceState.getStringArrayList(NEW_MSG_LIST_KEY);
+        }
 
-        //populateNewMessageList();
         populateSavedMessageList();
 
         GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
@@ -149,13 +108,6 @@ public class SavedMessagesActivity extends AppCompatActivity {
         savedGridViewArrayAdapter = new ArrayAdapter<String>
                 (this, android.R.layout.simple_list_item_1, savedMessageList);
         savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
-
-        //String[] mL = new String[messageList.size()];
-        //for(int i = 0; i < messageList.size(); i++) {
-        //    mL[i] = messageList.get(i);
-        //}
-
-        //MessageGridViewAdapter mgva = new MessageGridViewAdapter(this, android.R.layout.simple_list_item_1, mL);
 
         newMsgGridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -174,73 +126,47 @@ public class SavedMessagesActivity extends AppCompatActivity {
                 launchDisplayMessageActivity(selectedItem);
             }
         });
-
-        Button scanButton = (Button) findViewById(R.id.scan_button);
-
-        scanButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Button button = (Button) view;
-                if(button.getText().equals("Scan")) {
-                    scanLeDevice(true);
-                    button.setText("Stop");
-                } else {
-                    scanLeDevice(false);
-                    button.setText("Scan");
-                }
-            }
-        });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-        } else {
-            mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
-            settings = new ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                    .build();
-            filters = new ArrayList<ScanFilter>();
-            //scanLeDevice(true);
         }
+
+        populateNewMessageList();
+        newGridViewArrayAdapter.notifyDataSetChanged();
+        populateSavedMessageList();
+        savedGridViewArrayAdapter.notifyDataSetChanged();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (mBluetoothAdapter != null && mBluetoothAdapter.isEnabled()) {
-            scanLeDevice(false);
-        }
+
+        setStringArrayPref(this, NEW_MSG_LIST_KEY, newMessageList);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (mGatt == null) {
-            return;
-        }
-        mGatt.close();
-        mGatt = null;
+
+        unregisterReceiver(receiver);
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_saved_messages, menu);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
             return true;
         }
@@ -249,25 +175,25 @@ public class SavedMessagesActivity extends AppCompatActivity {
     }
 
     private void populateNewMessageList() {
-        newMessageList.clear();
-
-        //TODO: JSON file for persistence, tracking date
+        for(String s : getStringArrayPref(this, NEW_MSG_LIST_KEY)) {
+            if(isNewPromo(s))
+                newMessageList.add(s);
+        }
     }
 
     private void populateSavedMessageList() {
         savedMessageList.clear();
+
         String[] fileList = this.fileList();
 
-        //for(String s : fileList) {
-        //    if (!s.equals("instant-run"))
-        //        savedMessageList.add(s);
-        //}
-
-        //TODO: JSON file for persistence, tracking date
+        for(String s : fileList) {
+            if (!s.equals("instant-run"))
+                savedMessageList.add(s);
+        }
     }
 
-    private void addMessage(PromoMessage message) {
-        message.save();
+    private void deleteMessages(ArrayList<String> toBeDeleted) {
+
     }
 
     private void deleteAllMessages() {
@@ -278,139 +204,12 @@ public class SavedMessagesActivity extends AppCompatActivity {
         }
     }
 
-    private void scanLeDevice(final boolean enable) {
-        if (enable) {
-            // Stops scanning after a pre-defined scan period.
-            //mHandler.postDelayed(new Runnable() {
-            //    @Override
-            //    public void run() {
-            //        mScanning = false;
-            //        mLEScanner.stopScan(mScanCallback);
-            //    }
-            //}, SCAN_PERIOD);
-
-            mScanning = true;
-            mLEScanner.startScan(filters, settings, mScanCallback);
-            Log.i("scanLeDevice", "enable");
-            //Toast toast = Toast.makeText(getApplicationContext(), "scanLeDevice", Toast.LENGTH_SHORT);
-            //toast.show();
-        } else {
-            mScanning = false;
-            mLEScanner.stopScan(mScanCallback);
-            Log.i("scanLeDevice", "disable");
-        }
-    }
-
-    private ScanCallback mScanCallback = new ScanCallback() {
-        @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            //Toast toast = Toast.makeText(getApplicationContext(), "mScanCallback", Toast.LENGTH_SHORT);
-            //toast.show();
-
-            Log.i("callbackType", String.valueOf(callbackType));
-            Log.i("result", result.toString());
-            BluetoothDevice btDevice = result.getDevice();
-
-            ScanRecord record = result.getScanRecord();
-            String devName = record.getDeviceName();
-            //String devName = result.getDevice().getName();
-
-            //devName = "." + devName + ".";
-            if(devName != null) {
-                Log.i("deviceName", devName);
-            } else {
-                Log.i("deviceName", "null");
-            }
-
-            byte[] byteArray = record.getBytes();
-            //Log.i("Arrays.toString", Arrays.toString(byteArray));
-            //String s = new String(byteArray);
-            //Log.i("recordByteArrayString", s);
-
-            Log.i("bytesToHex", bytesToHex(byteArray));
-
-            ScanFilter filter = new ScanFilter.Builder().setDeviceName("mpromo").build();
-
-            if(filter.matches(result)) {
-                Log.i("matches", "true");
-                //PromoMessage message = new PromoMessage(bytesToHex(byteArray), getApplicationContext());
-                String filename = parseFileName(byteArray);
-                if(isNewPromo(filename))
-                    handleNewMessage(filename);
-            }
-
-            //connectToDevice(btDevice);
-        }
-
-        @Override
-        public void onBatchScanResults(List<ScanResult> results) {
-            for (ScanResult sr : results) {
-                Log.i("ScanResult - Results", sr.toString());
-            }
-        }
-
-        @Override
-        public void onScanFailed(int errorCode) {
-            Log.e("Scan Failed", "Error Code: " + errorCode);
-        }
-    };
-
-    public void connectToDevice(BluetoothDevice device) {
-        if (mGatt == null) {
-            mGatt = device.connectGatt(this, false, gattCallback);
-            scanLeDevice(false); // will stop after first device detection
-        }
-    }
-
-    private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-            Log.i("onConnectionStateChange", "Status: " + status);
-            switch (newState) {
-                case BluetoothProfile.STATE_CONNECTED:
-                    Log.i("gattCallback", "STATE_CONNECTED");
-                    gatt.discoverServices();
-                    break;
-                case BluetoothProfile.STATE_DISCONNECTED:
-                    Log.e("gattCallback", "STATE_DISCONNECTED");
-                    break;
-                default:
-                    Log.e("gattCallback", "STATE_OTHER");
-            }
-        }
-
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            List<BluetoothGattService> services = gatt.getServices();
-            Log.i("onServicesDiscovered", services.toString());
-            gatt.readCharacteristic(services.get(1).getCharacteristics().get
-                    (0));
-        }
-
-        @Override
-        public void onCharacteristicRead(BluetoothGatt gatt,
-                                         BluetoothGattCharacteristic characteristic, int status) {
-            Log.i("onCharacteristicRead", characteristic.toString());
-            gatt.disconnect();
-        }
-    };
-
     private void handleNewMessage(String filename) {
         newMessageList.add(filename);
-
-        //GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
-        //newMsgGridView.setAdapter(newGridViewArrayAdapter);
         newGridViewArrayAdapter.notifyDataSetChanged();
-
-        //PromoMessage message = new PromoMessage(filename, getApplicationContext());
-        //addMessage(message);
-        //populateSavedMessageList();
-        //GridView gridView = (GridView) findViewById(R.id.new_msg_gridview);
-        //gridView.setAdapter(gridViewArrayAdapter);
-        //gridViewArrayAdapter.notifyDataSetChanged();
     }
 
-        private boolean isNewPromo(String filename) {
+    protected boolean isNewPromo(String filename) {
         boolean result = true;
 
         for(String s : newMessageList) {
@@ -424,42 +223,6 @@ public class SavedMessagesActivity extends AppCompatActivity {
         }
 
         return result;
-    }
-
-    private String bytesToHex(byte[] bytes) {
-        char[] hexArray = "0123456789ABCDEF".toCharArray();
-
-        char[] hexChars = new char[bytes.length * 2];
-
-        for(int i = 0; i < bytes.length; i++) {
-            int x = bytes[i] & 0xFF;
-            hexChars[i * 2] = hexArray[x >>> 4];
-            hexChars[i * 2 + 1] = hexArray[x & 0x0F];
-        }
-
-        return new String(hexChars);
-    }
-
-    //private String bytesToString(byte[] bytes) {
-    //    return new String(bytes);
-    //}
-
-    private String parseFileName(byte[] bytes) {
-        String str = new String(bytes);
-        String[] tokens = str.split(":");
-        String name = tokens[1];
-        Log.i("tokens[0]", tokens[0]);
-        Log.i("name", name);
-
-        int periodLocation = 0;
-        for(int i = 0; i < name.length(); i++) {
-            if (name.charAt(i) == '.')
-                periodLocation = i;
-        }
-        Log.i("periodLocation", "" + periodLocation);
-        Log.i("nameTruncated", "*" + name.substring(0, periodLocation + 4) + "*");
-
-        return name.substring(0, periodLocation + 4);
     }
 
     private void downloadMessage(final String filename) {
@@ -488,13 +251,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
                                 runOnUiThread(new Runnable() {
                                     @Override
                                     public void run() {
-                                        //GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
-                                        //savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
-                                        savedGridViewArrayAdapter.notifyDataSetChanged();
-
-                                        //GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
-                                        //newMsgGridView.setAdapter(newGridViewArrayAdapter);
-                                        newGridViewArrayAdapter.notifyDataSetChanged();
+                                        //savedGridViewArrayAdapter.notifyDataSetChanged();
+                                        //newGridViewArrayAdapter.notifyDataSetChanged();
 
                                         launchDisplayMessageActivity(filename);
                                     }
@@ -547,6 +305,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private void launchDisplayMessageActivity(String filename) {
         Intent displayIntent = new Intent(getApplicationContext(), DisplayMessageActivity.class);
         displayIntent.putExtra("filename", filename);
+        Log.i("savedMessageList.get(0)", savedMessageList.get(0));
+        displayIntent.putExtra("filelist", savedMessageList);
         startActivityForResult(displayIntent, DELETE_RESULT);
     }
 
@@ -558,28 +318,66 @@ public class SavedMessagesActivity extends AppCompatActivity {
                 String fileToDelete = data.getStringExtra("fileToDelete");
                 savedMessageList.remove(fileToDelete);
                 savedGridViewArrayAdapter.notifyDataSetChanged();
-
-
-                //Grid
             }
         }
     }
 
-    private void demo() {
-        deleteAllMessages();
-        PromoMessage testMessage = new PromoMessage("test_message.txt", getApplicationContext());
-        addMessage(testMessage);
-        Log.i("demoRun", "true");
+    private BroadcastReceiver receiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction().equals("ACTION_BROADCAST_FILENAME")){
+                String filename = intent.getStringExtra("filename");
+                if(isNewPromo(filename))
+                    handleNewMessage(filename);
+            }
+        }
+    };
+
+    private static void setStringArrayPref(Context context, String key, ArrayList<String> values) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor editor = prefs.edit();
+        JSONArray a = new JSONArray();
+        for (int i = 0; i < values.size(); i++) {
+            a.put(values.get(i));
+        }
+        if (!values.isEmpty()) {
+            editor.putString(key, a.toString());
+        } else {
+            editor.putString(key, null);
+        }
+        editor.commit();
+
+        Log.i("SharedPrefs","saved newMessageList");
+        Log.i("JSONvalues", a.toString());
     }
 
-    private void demo2() {
-        deleteAllMessages();
+    private static ArrayList<String> getStringArrayPref(Context context, String key) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        String json = prefs.getString(key, null);
+        ArrayList<String> urls = new ArrayList<String>();
+        if (json != null) {
+            try {
+                JSONArray a = new JSONArray(json);
+                for (int i = 0; i < a.length(); i++) {
+                    String url = a.optString(i);
+                    urls.add(url);
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
 
-        populateNewMessageList();
-        newMessageList.add("Robyn_test1.jpg");
-        newMessageList.add("blinkenlights.txt");
-        newMessageList.add("345615.txt");
+        Log.i("SharedPrefs","loaded newMessageList");
+        Log.i("JSONvalues", urls.toString());
 
-        Log.i("demo2Run", "true");
+        return urls;
+    }
+
+    @Override
+    protected void onSaveInstanceState (Bundle outState) {
+        outState.putStringArrayList(NEW_MSG_LIST_KEY, newMessageList);
+        super.onSaveInstanceState(outState);
+
+        Log.i("StateSaved", newMessageList.toString());
     }
 }
