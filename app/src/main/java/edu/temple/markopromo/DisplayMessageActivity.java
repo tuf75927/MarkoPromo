@@ -1,5 +1,6 @@
 package edu.temple.markopromo;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -26,14 +27,13 @@ import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
 
-public class DisplayMessageActivity extends AppCompatActivity implements MessageFragment.OnFragmentInteractionListener{
+public class DisplayMessageActivity extends AppCompatActivity implements MessageFragment.OnFragmentInteractionListener {
 
     private String filename;
     private ArrayList<String> filelist;
     private WebView fileWebView;
     private ImageView fileImageView;
     private FrameLayout frameLayout;
-    private Button deleteButton;
     private ViewPager mPager;
     private PagerAdapter mPagerAdapter;
 
@@ -55,19 +55,7 @@ public class DisplayMessageActivity extends AppCompatActivity implements Message
         mPager.setAdapter(mPagerAdapter);
         mPager.setCurrentItem(getFileIndex(filename));
 
-        TextView filenameTextView = (TextView) findViewById(R.id.filename_textview);
-        filenameTextView.setText(filename);
-
         frameLayout = (FrameLayout) findViewById(R.id.file_frame_layout);
-
-        deleteButton = (Button) findViewById(R.id.delete_button);
-
-        deleteButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                deletePromo(filename);
-            }
-        });
     }
 
     private void deletePromo(String filename) {
@@ -96,8 +84,8 @@ public class DisplayMessageActivity extends AppCompatActivity implements Message
     }
 
     @Override
-    public void onFragmentInteraction(Uri uri) {
-
+    public void deleteFilename(String deleteFilename) {
+        deletePromo(deleteFilename);
     }
 
     private class MessagePagerAdapter extends FragmentStatePagerAdapter {

@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class BluetoothScanService extends IntentService {
-    private BluetoothAdapter mBluetoothAdapter;
     //private boolean mScanning;
     //private Handler mHandler;
     private List<ScanFilter> filters;
@@ -49,7 +48,7 @@ public class BluetoothScanService extends IntentService {
     protected void onHandleIntent(Intent intent) {
         if (intent != null) {
             final BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-            mBluetoothAdapter = bluetoothManager.getAdapter();
+            BluetoothAdapter mBluetoothAdapter = bluetoothManager.getAdapter();
             mLEScanner = mBluetoothAdapter.getBluetoothLeScanner();
             //mHandler = new Handler();
             settings = new ScanSettings.Builder()
@@ -86,6 +85,7 @@ public class BluetoothScanService extends IntentService {
 
             ScanRecord record = result.getScanRecord();
             String devName = record.getDeviceName();
+
             //String devName = result.getDevice().getName();
 
             //devName = "." + devName + ".";

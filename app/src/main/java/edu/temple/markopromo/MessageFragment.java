@@ -1,6 +1,8 @@
 package edu.temple.markopromo;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
@@ -10,6 +12,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
@@ -42,6 +45,7 @@ public class MessageFragment extends Fragment {
     private WebView fileWebView;
     private ImageView fileImageView;
     private FrameLayout frameLayout;
+    private Button deleteButton;
 
     private OnFragmentInteractionListener mListener;
 
@@ -100,6 +104,16 @@ public class MessageFragment extends Fragment {
             Toast.makeText(this.getContext(), "Unsupported file type!", Toast.LENGTH_SHORT).show();
         }
 
+        deleteButton = (Button) vg.findViewById(R.id.delete_button);
+
+        deleteButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                DisplayMessageActivity act = (DisplayMessageActivity) getActivity();
+                act.deleteFilename(filename);
+            }
+        });
+
         return vg;
     }
 
@@ -113,6 +127,8 @@ public class MessageFragment extends Fragment {
                     + " must implement OnFragmentInteractionListener");
         }
     }
+
+
 
     @Override
     public void onDetach() {
@@ -131,8 +147,7 @@ public class MessageFragment extends Fragment {
      * >Communicating with Other Fragments</a> for more information.
      */
     public interface OnFragmentInteractionListener {
-        // TODO: Update argument type and name
-        void onFragmentInteraction(Uri uri);
+        void deleteFilename(String newFilename);
     }
 
     protected boolean isTextFile(String filename) {
