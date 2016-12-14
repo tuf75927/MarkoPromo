@@ -19,10 +19,13 @@ import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.GridView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.amazonaws.auth.AnonymousAWSCredentials;
@@ -44,6 +47,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private BluetoothAdapter mBluetoothAdapter;
     private ArrayAdapter<String> newGridViewArrayAdapter;
     private ArrayAdapter<String> savedGridViewArrayAdapter;
+    //private CheckboxAdapter newMsgCheckboxAdapter;
+    //private CheckboxAdapter savedMsgCheckboxAdapter;
 
     private final static int REQUEST_ENABLE_BT = 1;
     private final static int REQUEST_ENABLE_LOC = 2;
@@ -95,16 +100,24 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
         if (savedInstanceState != null) {
             newMessageList = savedInstanceState.getStringArrayList(NEW_MSG_LIST_KEY);
+        } else {
+            populateNewMessageList();
         }
 
         populateSavedMessageList();
 
         GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+        //newMsgCheckboxAdapter = new CheckboxAdapter(this, android.R.layout.simple_list_item_1, newMessageList.toArray());
+        //newMsgGridView.setAdapter(newMsgCheckboxAdapter);
+
         newGridViewArrayAdapter = new ArrayAdapter<String>
                 (this, android.R.layout.simple_list_item_1, newMessageList);
         newMsgGridView.setAdapter(newGridViewArrayAdapter);
 
         GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
+        //savedMsgCheckboxAdapter = new CheckboxAdapter(this, android.R.layout.simple_list_item_1, savedMessageList.toArray());
+        //savedMsgGridView.setAdapter(savedMsgCheckboxAdapter);
+
         savedGridViewArrayAdapter = new ArrayAdapter<String>
                 (this, android.R.layout.simple_list_item_1, savedMessageList);
         savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
@@ -139,8 +152,10 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
         populateNewMessageList();
         newGridViewArrayAdapter.notifyDataSetChanged();
+        //newMsgCheckboxAdapter.notifyDataSetChanged();
         populateSavedMessageList();
         savedGridViewArrayAdapter.notifyDataSetChanged();
+        //savedMsgCheckboxAdapter.notifyDataSetChanged();
     }
 
     @Override
@@ -206,6 +221,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
     private void handleNewMessage(String filename) {
         newMessageList.add(filename);
+        //newMsgCheckboxAdapter.notifyDataSetChanged();
         newGridViewArrayAdapter.notifyDataSetChanged();
     }
 
@@ -318,6 +334,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
                 String fileToDelete = data.getStringExtra("fileToDelete");
                 savedMessageList.remove(fileToDelete);
                 savedGridViewArrayAdapter.notifyDataSetChanged();
+                //savedMsgCheckboxAdapter.notifyDataSetChanged();
             }
         }
     }
@@ -379,5 +396,39 @@ public class SavedMessagesActivity extends AppCompatActivity {
         super.onSaveInstanceState(outState);
 
         Log.i("StateSaved", newMessageList.toString());
+    }
+
+    public class CheckboxAdapter extends ArrayAdapter {
+        Context context;
+        Object[] list;
+
+        public CheckboxAdapter(Context context, int resource, Object[] list) {
+            super(context, resource, list);
+            this.context = context;
+            this.list = list;
+            Log.i("checkbox created", "true");
+            Log.i("checkbox list", list[0].toString());
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            View view = super.getView(position, convertView, parent);
+
+            if(position % 2 == 0) {
+                CheckBox checkBox = new CheckBox(context);
+                view = checkBox;
+            } else {
+                TextView textView = new TextView(context);
+                view = textView;
+                ((TextView) view).setText(list[position].toString());
+                ((TextView) view).setTextSize(20);
+            }
+
+            Log.i("checkbox pos", ""+position);
+
+            //((CheckBox) view).setText(list[position].toString());
+
+            return view;
+        }
     }
 }
