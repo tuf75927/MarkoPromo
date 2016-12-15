@@ -1,10 +1,14 @@
 package edu.temple.markopromo;
 
 import android.Manifest;
+import android.app.AlertDialog;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -13,24 +17,22 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.NotificationCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.LinearLayoutCompat;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.GridView;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -44,7 +46,6 @@ import com.amazonaws.services.s3.AmazonS3Client;
 
 import org.json.JSONArray;
 import org.json.JSONException;
-import org.w3c.dom.Text;
 
 import java.io.File;
 import java.lang.reflect.Array;
@@ -53,11 +54,13 @@ import java.util.ArrayList;
 public class SavedMessagesActivity extends AppCompatActivity {
 
     private BluetoothAdapter mBluetoothAdapter;
-    private NewMsgCheckboxAdapter newMsgCheckboxAdapter;
-    private SavedMsgCheckboxAdapter savedMsgCheckboxAdapter;
 
     private final static int REQUEST_ENABLE_BT = 1;
     private final static int REQUEST_ENABLE_LOC = 2;
+    public static final int DELETE_RESULT = 3;
+
+    private static final String bucket = "mpmsg";
+    public static final String NEW_MSG_LIST_KEY = "new_msg_list_key";
 
     protected ArrayList<String> newMessageList;
     protected ArrayList<String> savedMessageList;
@@ -65,12 +68,12 @@ public class SavedMessagesActivity extends AppCompatActivity {
     protected ArrayList<String> toBeDeletedSavedList;
     public static File directory;
 
-    protected GridView newMsgGridView;
-    protected GridView savedMsgGridView;
+    //protected GridView newMsgGridView;
+    //protected GridView savedMsgGridView;
+    //private NewMsgCheckboxAdapter newMsgCheckboxAdapter;
+    //private SavedMsgCheckboxAdapter savedMsgCheckboxAdapter;
 
-    private static final String bucket = "mpmsg";
-    public static final int DELETE_RESULT = 1;
-    public static final String NEW_MSG_LIST_KEY = "new_msg_list_key";
+    private boolean isActivityRunning;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,22 +89,9 @@ public class SavedMessagesActivity extends AppCompatActivity {
             finish();
         }
 
-        // Turns on Bluetooth
-        final BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        mBluetoothAdapter = bluetoothManager.getAdapter();
-        if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
-            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-        }
-
-        requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_ENABLE_LOC);
-
         IntentFilter ifilter = new IntentFilter();
         ifilter.addAction("ACTION_BROADCAST_FILENAME");
         registerReceiver(receiver, ifilter);
-
-        Intent serviceIntent = new Intent(this, BluetoothScanService.class);
-        startService(serviceIntent);
 
         directory = getFilesDir();
 
@@ -118,15 +108,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
         populateSavedMessageList();
 
-        newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
-
-        newMsgCheckboxAdapter = new NewMsgCheckboxAdapter(this, android.R.layout.simple_list_item_1, newMessageList.toArray());
-        newMsgGridView.setAdapter(newMsgCheckboxAdapter);
-
-        savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
-
-        savedMsgCheckboxAdapter = new SavedMsgCheckboxAdapter(this, android.R.layout.simple_list_item_1, savedMessageList.toArray());
-        savedMsgGridView.setAdapter(savedMsgCheckboxAdapter);
+        Log.i("initGrid", "onCreate");
+        initGridviews(newMessageList, savedMessageList);
 
         Button deleteButton = (Button) findViewById(R.id.delete_button);
 
@@ -145,9 +128,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
                         }
                     }
 
-                    Log.i("deleteButtonNew", newMessageList.toString());
-                    newMsgCheckboxAdapter.notifyDataSetChanged();
-                    recreate();
+                    //newMsgCheckboxAdapter.notifyDataSetChanged();
+                    //recreate();
                 }
 
                 if(toBeDeletedSavedList != null) {
@@ -157,9 +139,12 @@ public class SavedMessagesActivity extends AppCompatActivity {
                     }
                     populateSavedMessageList();
                     Log.i("deleteButtonSaved", savedMessageList.toString());
-                    savedMsgCheckboxAdapter.notifyDataSetChanged();
-                    recreate();
+                    //savedMsgCheckboxAdapter.notifyDataSetChanged();
+                    //recreate();
                 }
+
+                Log.i("initGrid", "delete button listener");
+                initGridviews(newMessageList, savedMessageList);
             }
         });
     }
@@ -168,17 +153,29 @@ public class SavedMessagesActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
+        isActivityRunning = true;
+
+        // Turns on Bluetooth
+        final BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        mBluetoothAdapter = bluetoothManager.getAdapter();
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
             Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+        } else {
+            Intent serviceIntent = new Intent(this, BluetoothScanService.class);
+            startService(serviceIntent);
         }
 
+        //showLocationStatePermission();
+
+        //requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_ENABLE_LOC);
+
         populateNewMessageList();
-        newMsgCheckboxAdapter.notifyDataSetChanged();
-        //recreate();
+        //newMsgCheckboxAdapter.notifyDataSetChanged();
         populateSavedMessageList();
-        savedMsgCheckboxAdapter.notifyDataSetChanged();
-        //recreate();
+        //savedMsgCheckboxAdapter.notifyDataSetChanged();
+        Log.i("initGrid", "onResume");
+        initGridviews(newMessageList, savedMessageList);
     }
 
     @Override
@@ -186,6 +183,10 @@ public class SavedMessagesActivity extends AppCompatActivity {
         super.onPause();
 
         setStringArrayPref(this, NEW_MSG_LIST_KEY, newMessageList);
+
+        Log.i("initGrid", "setStringArrayPref " + newMessageList.toString());
+
+        isActivityRunning = false;
     }
 
     @Override
@@ -240,8 +241,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
     private void handleNewMessage(String filename) {
         newMessageList.add(filename);
-        newMsgCheckboxAdapter.notifyDataSetChanged();
-        recreate();
+        //newMsgCheckboxAdapter.notifyDataSetChanged();
+        Log.i("initGrid", "handleNewMessage");
+        initGridviews(newMessageList, savedMessageList);
+
+        setStringArrayPref(this, NEW_MSG_LIST_KEY, newMessageList);
     }
 
     protected boolean isNewPromo(String filename) {
@@ -347,14 +351,71 @@ public class SavedMessagesActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 
-        if (requestCode == DELETE_RESULT) {
+        if(requestCode == REQUEST_ENABLE_BT) {
+            if(resultCode == RESULT_OK) {
+                Intent serviceIntent = new Intent(this, BluetoothScanService.class);
+                startService(serviceIntent);
+            }
+        } else if (requestCode == DELETE_RESULT) {
             if(resultCode == DELETE_RESULT){
                 String fileToDelete = data.getStringExtra("fileToDelete");
                 savedMessageList.remove(fileToDelete);
-                savedMsgCheckboxAdapter.notifyDataSetChanged();
+                //savedMsgCheckboxAdapter.notifyDataSetChanged();
+                Log.i("initGrid", "onActivityResult");
+                initGridviews(newMessageList, savedMessageList);
             }
         }
-        recreate();
+    }
+
+    private void showLocationStatePermission() {
+        int permissionCheck = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_FINE_LOCATION);
+        if (permissionCheck != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.ACCESS_FINE_LOCATION)) {
+                showExplanation("Permission Needed", "Rationale", Manifest.permission.ACCESS_FINE_LOCATION, REQUEST_ENABLE_LOC);
+            } else {
+                requestPermission(Manifest.permission.ACCESS_FINE_LOCATION, REQUEST_ENABLE_LOC);
+            }
+        } else {
+            Toast.makeText(this, "Permission (already) Granted!", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showExplanation(String title,
+                                 String message,
+                                 final String permission,
+                                 final int permissionRequestCode) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        requestPermission(permission, permissionRequestCode);
+                    }
+                });
+        builder.create().show();
+    }
+
+    private void requestPermission(String permissionName, int permissionRequestCode) {
+        ActivityCompat.requestPermissions(this,
+                new String[]{permissionName}, permissionRequestCode);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String permissions[],
+            int[] grantResults) {
+        switch (requestCode) {
+            case REQUEST_ENABLE_LOC:
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Permission Granted!", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "Permission Denied!", Toast.LENGTH_SHORT).show();
+                }
+        }
     }
 
     private BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -362,8 +423,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals("ACTION_BROADCAST_FILENAME")){
                 String filename = intent.getStringExtra("filename");
-                if(isNewPromo(filename))
+                if(isNewPromo(filename)) {
                     handleNewMessage(filename);
+                    if(!isActivityRunning)
+                        issueNotification();
+                }
             }
         }
     };
@@ -566,5 +630,48 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
             return linearLayout;
         }
+    }
+
+    private void issueNotification() {
+        NotificationCompat.Builder mBuilder =
+                new NotificationCompat.Builder(this)
+                        .setSmallIcon(R.drawable.notification_icon)
+                        .setContentTitle("MarkoPromo")
+                        .setContentText("You have received a new promo!")
+                        .setAutoCancel(true);
+
+        Intent resultIntent = new Intent(this, SavedMessagesActivity.class);
+
+        PendingIntent resultPendingIntent =
+                PendingIntent.getActivity(
+                        getApplicationContext(),
+                        0,
+                        resultIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT
+                );
+
+        mBuilder.setContentIntent(resultPendingIntent);
+
+        int mNotificationId = 1;
+        NotificationManager mNotifyMgr = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+
+        mNotifyMgr.notify(mNotificationId, mBuilder.build());
+        Log.i("Notification", "sent");
+        finish();
+    }
+
+    private void initGridviews(ArrayList<String> newMsgs, ArrayList<String> savedMsgs) {
+        GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
+
+        NewMsgCheckboxAdapter newMsgCheckboxAdapter = new NewMsgCheckboxAdapter(this, android.R.layout.simple_list_item_1, newMsgs.toArray());
+        newMsgGridView.setAdapter(newMsgCheckboxAdapter);
+
+        GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
+
+        SavedMsgCheckboxAdapter savedMsgCheckboxAdapter = new SavedMsgCheckboxAdapter(this, android.R.layout.simple_list_item_1, savedMsgs.toArray());
+        savedMsgGridView.setAdapter(savedMsgCheckboxAdapter);
+
+        Log.i("initGrid N", newMsgs.toString());
+        Log.i("initGrid S", savedMsgs.toString());
     }
 }
