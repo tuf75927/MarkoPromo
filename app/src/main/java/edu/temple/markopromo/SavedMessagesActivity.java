@@ -14,17 +14,23 @@ import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutCompat;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.GridView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,25 +44,29 @@ import com.amazonaws.services.s3.AmazonS3Client;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.w3c.dom.Text;
 
 import java.io.File;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 
 public class SavedMessagesActivity extends AppCompatActivity {
 
     private BluetoothAdapter mBluetoothAdapter;
-    private ArrayAdapter<String> newGridViewArrayAdapter;
-    private ArrayAdapter<String> savedGridViewArrayAdapter;
-    //private CheckboxAdapter newMsgCheckboxAdapter;
-    //private CheckboxAdapter savedMsgCheckboxAdapter;
+    private NewMsgCheckboxAdapter newMsgCheckboxAdapter;
+    private SavedMsgCheckboxAdapter savedMsgCheckboxAdapter;
 
     private final static int REQUEST_ENABLE_BT = 1;
     private final static int REQUEST_ENABLE_LOC = 2;
 
     protected ArrayList<String> newMessageList;
     protected ArrayList<String> savedMessageList;
-    private ArrayList<String> selectedMessageList;
+    protected ArrayList<String> toBeDeletedNewList;
+    protected ArrayList<String> toBeDeletedSavedList;
     public static File directory;
+
+    protected GridView newMsgGridView;
+    protected GridView savedMsgGridView;
 
     private static final String bucket = "mpmsg";
     public static final int DELETE_RESULT = 1;
@@ -97,6 +107,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
         newMessageList = new ArrayList<String>();
         savedMessageList = new ArrayList<String>();
+        toBeDeletedNewList = new ArrayList<String>();
+        toBeDeletedSavedList = new ArrayList<String>();
 
         if (savedInstanceState != null) {
             newMessageList = savedInstanceState.getStringArrayList(NEW_MSG_LIST_KEY);
@@ -106,37 +118,48 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
         populateSavedMessageList();
 
-        GridView newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
-        //newMsgCheckboxAdapter = new CheckboxAdapter(this, android.R.layout.simple_list_item_1, newMessageList.toArray());
-        //newMsgGridView.setAdapter(newMsgCheckboxAdapter);
+        newMsgGridView = (GridView) findViewById(R.id.new_msg_gridview);
 
-        newGridViewArrayAdapter = new ArrayAdapter<String>
-                (this, android.R.layout.simple_list_item_1, newMessageList);
-        newMsgGridView.setAdapter(newGridViewArrayAdapter);
+        newMsgCheckboxAdapter = new NewMsgCheckboxAdapter(this, android.R.layout.simple_list_item_1, newMessageList.toArray());
+        newMsgGridView.setAdapter(newMsgCheckboxAdapter);
 
-        GridView savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
-        //savedMsgCheckboxAdapter = new CheckboxAdapter(this, android.R.layout.simple_list_item_1, savedMessageList.toArray());
-        //savedMsgGridView.setAdapter(savedMsgCheckboxAdapter);
+        savedMsgGridView = (GridView) findViewById(R.id.saved_msg_gridview);
 
-        savedGridViewArrayAdapter = new ArrayAdapter<String>
-                (this, android.R.layout.simple_list_item_1, savedMessageList);
-        savedMsgGridView.setAdapter(savedGridViewArrayAdapter);
+        savedMsgCheckboxAdapter = new SavedMsgCheckboxAdapter(this, android.R.layout.simple_list_item_1, savedMessageList.toArray());
+        savedMsgGridView.setAdapter(savedMsgCheckboxAdapter);
 
-        newMsgGridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        Button deleteButton = (Button) findViewById(R.id.delete_button);
+
+        deleteButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                String selectedItem = parent.getItemAtPosition(position).toString();
+            public void onClick(View view) {
+                if(toBeDeletedNewList != null) {
+                    for(String s: toBeDeletedNewList) {
+                        int i = 0;
+                        for(String t : newMessageList) {
+                            if(s.equalsIgnoreCase(t)) {
+                                newMessageList.remove(i);
+                                break;
+                            }
+                            i++;
+                        }
+                    }
 
-                downloadMessage(selectedItem);
-            }
-        });
+                    Log.i("deleteButtonNew", newMessageList.toString());
+                    newMsgCheckboxAdapter.notifyDataSetChanged();
+                    recreate();
+                }
 
-        savedMsgGridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                String selectedItem = parent.getItemAtPosition(position).toString();
+                if(toBeDeletedSavedList != null) {
+                    for(String s : toBeDeletedSavedList) {
+                        deleteFile(s);
 
-                launchDisplayMessageActivity(selectedItem);
+                    }
+                    populateSavedMessageList();
+                    Log.i("deleteButtonSaved", savedMessageList.toString());
+                    savedMsgCheckboxAdapter.notifyDataSetChanged();
+                    recreate();
+                }
             }
         });
     }
@@ -151,11 +174,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
         }
 
         populateNewMessageList();
-        newGridViewArrayAdapter.notifyDataSetChanged();
-        //newMsgCheckboxAdapter.notifyDataSetChanged();
+        newMsgCheckboxAdapter.notifyDataSetChanged();
+        //recreate();
         populateSavedMessageList();
-        savedGridViewArrayAdapter.notifyDataSetChanged();
-        //savedMsgCheckboxAdapter.notifyDataSetChanged();
+        savedMsgCheckboxAdapter.notifyDataSetChanged();
+        //recreate();
     }
 
     @Override
@@ -207,10 +230,6 @@ public class SavedMessagesActivity extends AppCompatActivity {
         }
     }
 
-    private void deleteMessages(ArrayList<String> toBeDeleted) {
-
-    }
-
     private void deleteAllMessages() {
         String[] fileList = this.fileList();
 
@@ -221,8 +240,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
     private void handleNewMessage(String filename) {
         newMessageList.add(filename);
-        //newMsgCheckboxAdapter.notifyDataSetChanged();
-        newGridViewArrayAdapter.notifyDataSetChanged();
+        newMsgCheckboxAdapter.notifyDataSetChanged();
+        recreate();
     }
 
     protected boolean isNewPromo(String filename) {
@@ -321,7 +340,6 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private void launchDisplayMessageActivity(String filename) {
         Intent displayIntent = new Intent(getApplicationContext(), DisplayMessageActivity.class);
         displayIntent.putExtra("filename", filename);
-        Log.i("savedMessageList.get(0)", savedMessageList.get(0));
         displayIntent.putExtra("filelist", savedMessageList);
         startActivityForResult(displayIntent, DELETE_RESULT);
     }
@@ -333,10 +351,10 @@ public class SavedMessagesActivity extends AppCompatActivity {
             if(resultCode == DELETE_RESULT){
                 String fileToDelete = data.getStringExtra("fileToDelete");
                 savedMessageList.remove(fileToDelete);
-                savedGridViewArrayAdapter.notifyDataSetChanged();
-                //savedMsgCheckboxAdapter.notifyDataSetChanged();
+                savedMsgCheckboxAdapter.notifyDataSetChanged();
             }
         }
+        recreate();
     }
 
     private BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -398,37 +416,155 @@ public class SavedMessagesActivity extends AppCompatActivity {
         Log.i("StateSaved", newMessageList.toString());
     }
 
-    public class CheckboxAdapter extends ArrayAdapter {
+    public class SavedMsgCheckboxAdapter extends ArrayAdapter {
         Context context;
         Object[] list;
 
-        public CheckboxAdapter(Context context, int resource, Object[] list) {
+        public SavedMsgCheckboxAdapter(Context context, int resource, Object[] list) {
             super(context, resource, list);
             this.context = context;
             this.list = list;
             Log.i("checkbox created", "true");
-            Log.i("checkbox list", list[0].toString());
         }
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
-            View view = super.getView(position, convertView, parent);
+            LinearLayout linearLayout = new LinearLayout(context);
+            linearLayout.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            linearLayout.setOrientation(LinearLayout.HORIZONTAL);
 
-            if(position % 2 == 0) {
-                CheckBox checkBox = new CheckBox(context);
-                view = checkBox;
-            } else {
-                TextView textView = new TextView(context);
-                view = textView;
-                ((TextView) view).setText(list[position].toString());
-                ((TextView) view).setTextSize(20);
-            }
+            final CheckBox checkBox = new CheckBox(context);
+
+            checkBox.setText("   ");
+            checkBox.setId(position);
+            checkBox.setClickable(true);
+
+            checkBox.setOnCheckedChangeListener(new CheckBox.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                    int i = compoundButton.getId();
+                    String str = list[i].toString();
+                    if(isChecked) {
+                        toBeDeletedSavedList.add(str);
+                        Log.i("toBeDeleted S", toBeDeletedSavedList.toString());
+                    } else {
+                        int j = 0;
+                        for(String s : toBeDeletedSavedList) {
+                            if(s.equalsIgnoreCase(str)) {
+                                toBeDeletedSavedList.remove(j);
+                                Log.i("toBeDeleted S", toBeDeletedSavedList.toString());
+                                break;
+                            }
+                            j++;
+                        }
+                    }
+                }
+            });
+
+            final TextView textView = new TextView(context);
+
+            textView.setText(list[position].toString());
+            textView.setTextSize(20);
+            //textView.setId(position);
+            textView.setClickable(true);
+            textView.setFocusable(true);
+            textView.setSelectAllOnFocus(true);
+            int h = textView.getLineHeight();
+            textView.setMinHeight(h*2);
+
+            textView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    toBeDeletedSavedList.clear();
+                    toBeDeletedNewList.clear();
+                    launchDisplayMessageActivity(textView.getText().toString());
+                }
+            });
 
             Log.i("checkbox pos", ""+position);
 
-            //((CheckBox) view).setText(list[position].toString());
+            linearLayout.addView(checkBox);
+            linearLayout.addView(textView);
 
-            return view;
+            return linearLayout;
+        }
+    }
+
+    public class NewMsgCheckboxAdapter extends ArrayAdapter {
+        Context context;
+        Object[] list;
+        ArrayList<TextView> myTextViews;
+
+        public NewMsgCheckboxAdapter(Context context, int resource, Object[] list) {
+            super(context, resource, list);
+            this.context = context;
+            this.list = list;
+            myTextViews = new ArrayList<TextView>();
+            Log.i("checkbox created", "true");
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            LinearLayout linearLayout = new LinearLayout(context);
+            linearLayout.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            linearLayout.setOrientation(LinearLayout.HORIZONTAL);
+
+            final CheckBox checkBox = new CheckBox(context);
+
+            checkBox.setText("   ");
+            checkBox.setId(position);
+            checkBox.setClickable(true);
+
+            checkBox.setOnCheckedChangeListener(new CheckBox.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                    int i = compoundButton.getId();
+                    String str = list[i].toString();
+                    if(isChecked) {
+                        toBeDeletedNewList.add(str);
+                        Log.i("toBeDeleted N", toBeDeletedNewList.toString());
+                    } else {
+                        int j = 0;
+                        for(String s : toBeDeletedNewList) {
+                            if(s.equalsIgnoreCase(str)) {
+                                toBeDeletedNewList.remove(j);
+                                Log.i("toBeDeleted N", toBeDeletedNewList.toString());
+                                break;
+                            }
+                            j++;
+                        }
+                    }
+                }
+            });
+
+            final TextView textView = new TextView(context);
+
+            textView.setText(list[position].toString());
+            textView.setTextSize(20);
+            textView.setId(position);
+            textView.setClickable(true);
+            textView.setFocusable(true);
+            textView.setSelectAllOnFocus(true);
+            int h = textView.getLineHeight();
+            textView.setMinHeight(h*2);
+
+            textView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    toBeDeletedSavedList.clear();
+                    toBeDeletedNewList.clear();
+                    downloadMessage(textView.getText().toString());
+                }
+            });
+
+            myTextViews.add(textView);
+
+            Log.i("checkbox pos", ""+position);
+
+            linearLayout.addView(checkBox);
+            linearLayout.addView(textView);
+
+            return linearLayout;
         }
     }
 }

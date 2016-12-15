@@ -69,11 +69,13 @@
                 android:id="@+id/new_msg_gridview"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="200dp"
-                android:layout_below="@+id/new_msg_textview"
                 android:horizontalSpacing="1dp"
                 android:verticalSpacing="1dp"
-                android:numColumns="1" />
+                android:numColumns="1"
+                android:layout_marginTop="@dimen/activity_vertical_margin"
+                android:layout_marginStart="@dimen/activity_vertical_margin"
+                android:layout_below="@+id/new_msg_textview"/>
+
         </RelativeLayout>
 
         <RelativeLayout
@@ -98,11 +100,12 @@
                 android:id="@+id/saved_msg_gridview"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="100dp"
-                android:layout_below="@+id/saved_msg_textview"
                 android:horizontalSpacing="1dp"
                 android:verticalSpacing="1dp"
-                android:numColumns="1" />
+                android:numColumns="1"
+                android:layout_marginTop="@dimen/activity_vertical_margin"
+                android:layout_marginStart="@dimen/activity_vertical_margin"
+                android:layout_below="@+id/saved_msg_textview"/>
 
         </RelativeLayout>
     </LinearLayout>
