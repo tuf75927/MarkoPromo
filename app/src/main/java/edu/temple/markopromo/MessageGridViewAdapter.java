@@ -1,3 +1,15 @@
+/* Marko Promo
+ * Temple University
+ * CIS 4398 Projects in Computer Science
+ * Fall 2016
+ *
+ * mobile app by Robyn McCue
+ *
+ * MessageGridViewAdapter.java
+ *
+ * A helper class, defining an adapter to be used in a GridView listing messages. Not used in final version.
+ */
+
 package edu.temple.markopromo;
 
 import android.content.Context;

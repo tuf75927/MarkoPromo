@@ -1,10 +1,18 @@
+/* Marko Promo
+ * Temple University
+ * CIS 4398 Projects in Computer Science
+ * Fall 2016
+ *
+ * mobile app by Robyn McCue
+ *
+ * DisplayMessageActivity.java
+ *
+ * The secondary page of the Marko Promo mobile application, displaying received and downloaded promos.
+ */
+
 package edu.temple.markopromo;
 
-import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.net.Uri;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
@@ -14,17 +22,12 @@ import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
-import android.view.View;
 import android.webkit.WebView;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.util.ArrayList;
 
 public class DisplayMessageActivity extends AppCompatActivity implements MessageFragment.OnFragmentInteractionListener {

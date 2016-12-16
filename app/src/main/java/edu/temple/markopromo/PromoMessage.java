@@ -1,3 +1,15 @@
+/* Marko Promo
+ * Temple University
+ * CIS 4398 Projects in Computer Science
+ * Fall 2016
+ *
+ * mobile app by Robyn McCue
+ *
+ * PromoMessage.java
+ *
+ * A POJO helper class defining promo messages. Not used in final version.
+ */
+
 package edu.temple.markopromo;
 
 import android.content.Context;

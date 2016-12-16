@@ -17,6 +17,7 @@ import android.content.Intent;
 import android.content.Context;
 import android.os.Binder;
 import android.os.IBinder;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 

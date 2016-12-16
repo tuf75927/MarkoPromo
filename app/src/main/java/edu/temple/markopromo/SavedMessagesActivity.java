@@ -1,26 +1,36 @@
+/* Marko Promo
+ * Temple University
+ * CIS 4398 Projects in Computer Science
+ * Fall 2016
+ *
+ * mobile app by Robyn McCue
+ *
+ * SavedMessagesActivity.java
+ *
+ * The main page of the Marko Promo mobile application, displaying list of new and saved promo messages.
+ */
+
 package edu.temple.markopromo;
 
 import android.Manifest;
-import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
@@ -55,15 +65,10 @@ import com.google.gson.Gson;
 
 import org.json.JSONArray;
 import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.File;
-import java.lang.reflect.Array;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 
 public class SavedMessagesActivity extends AppCompatActivity implements GoogleApiClient.OnConnectionFailedListener {
 
@@ -71,7 +76,7 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
     private static GoogleApiClient mGoogleApiClient;
 
     private final static int REQUEST_ENABLE_BT = 1;
-    private final static int REQUEST_ENABLE_LOC = 2;
+    protected final static int REQUEST_ENABLE_LOC = 2;
     public static final int DELETE_RESULT = 3;
 
     private static final String bucket = "mpmsg";
@@ -114,14 +119,17 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
             finish();
         }
 
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_ENABLE_LOC);
+        }
+
         mGoogleApiClient = new GoogleApiClient
                 .Builder(this)
                 .addApi(Places.GEO_DATA_API)
                 .addApi(Places.PLACE_DETECTION_API)
                 .enableAutoManage(this, this)
                 .build();
-
-        //getLocation(this);
 
         IntentFilter ifilter = new IntentFilter();
         ifilter.addAction("ACTION_BROADCAST_FILENAME");
@@ -210,16 +218,12 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
             startService(serviceIntent);
         }
 
-        //showLocationStatePermission();
-
-        //requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_ENABLE_LOC);
-
         populateNewMessageList();
         //newMsgCheckboxAdapter.notifyDataSetChanged();
         populateSavedMessageList();
         //savedMsgCheckboxAdapter.notifyDataSetChanged();
-        //getHashMapPref(this, LOC_MAP_KEY);
-        //getHashMapPref(this, TIME_MAP_KEY);
+        getHashMapPref(this, LOC_MAP_KEY);
+        getHashMapPref(this, TIME_MAP_KEY);
 
         Log.i("initGrid", "onResume");
         initGridviews(newMessageList, savedMessageList);
@@ -230,8 +234,8 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
         super.onPause();
 
         setStringArrayPref(this, NEW_MSG_LIST_KEY, newMessageList);
-        //setHashMapPref(this, LOC_MAP_KEY, locationMap);
-        //setHashMapPref(this, TIME_MAP_KEY, timestampMap);
+        setHashMapPref(this, LOC_MAP_KEY, locationMap);
+        setHashMapPref(this, TIME_MAP_KEY, timestampMap);
         //setPromoMessageArrayPref(this, NEW_PM_LIST_KEY, promoMessageList);
         //setHashMapPref(this, LOC_MAP_KEY, locationMap);
 
@@ -290,9 +294,10 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
         }
     }
 
-    private void handleNewMessage(String filename, String datetime) {
+    private void handleNewMessage(String filename, String datetime) throws SecurityException {
 
         newMessageList.add(filename);
+        timestampMap.put(filename, datetime);
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // TODO: Consider calling
@@ -306,10 +311,10 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
         }
 
         final String f = filename;
-        final String t = datetime;
 
         PendingResult<PlaceLikelihoodBuffer> result = Places.PlaceDetectionApi.getCurrentPlace(mGoogleApiClient, null);
         result.setResultCallback(new ResultCallback<PlaceLikelihoodBuffer>() {
+
             @Override
             public void onResult(PlaceLikelihoodBuffer likelyPlaces) {
                 String location = "Unknown location";
@@ -331,7 +336,6 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
                 //promoMessageList.add(pm);
 
                 locationMap.put(f, location);
-                timestampMap.put(f, t);
 
                 Log.i("initGrid", "handleNewMessage");
                 initGridviews(newMessageList, savedMessageList);
@@ -357,7 +361,7 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
         return result;
     }
 
-    protected static String getLocation(Context context) {
+    protected static void getLocation(Context context) {
         String f;
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // TODO: Consider calling
@@ -367,7 +371,7 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
             //                                          int[] grantResults)
             // to handle the case where the user grants the permission. See the documentation
             // for ActivityCompat#requestPermissions for more details.
-            return null;
+            return;
         }
 
         PendingResult<PlaceLikelihoodBuffer> result = Places.PlaceDetectionApi.getCurrentPlace(mGoogleApiClient, null);
@@ -387,11 +391,12 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
                 }
                 likelyPlaces.release();
                 Log.i("LOCDEBUG", "most likely location = " + location);
-                tempLocation = location;
+                //tempLocation = location;
+
             }
         });
 
-        return tempLocation;
+        //return tempLocation;
     }
 
     private void downloadMessage(final String filename) {
@@ -498,58 +503,6 @@ public class SavedMessagesActivity extends AppCompatActivity implements GoogleAp
             }
         }
     }
-
-    /*
-    private void showLocationStatePermission() {
-        int permissionCheck = ContextCompat.checkSelfPermission(
-                this, Manifest.permission.ACCESS_FINE_LOCATION);
-        if (permissionCheck != PackageManager.PERMISSION_GRANTED) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION)) {
-                showExplanation("Permission Needed", "Rationale", Manifest.permission.ACCESS_FINE_LOCATION, REQUEST_ENABLE_LOC);
-            } else {
-                requestPermission(Manifest.permission.ACCESS_FINE_LOCATION, REQUEST_ENABLE_LOC);
-            }
-        } else {
-            Toast.makeText(this, "Permission (already) Granted!", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void showExplanation(String title,
-                                 String message,
-                                 final String permission,
-                                 final int permissionRequestCode) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(title)
-                .setMessage(message)
-                .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int id) {
-                        requestPermission(permission, permissionRequestCode);
-                    }
-                });
-        builder.create().show();
-    }
-
-    private void requestPermission(String permissionName, int permissionRequestCode) {
-        ActivityCompat.requestPermissions(this,
-                new String[]{permissionName}, permissionRequestCode);
-    }
-
-    @Override
-    public void onRequestPermissionsResult(
-            int requestCode,
-            String permissions[],
-            int[] grantResults) {
-        switch (requestCode) {
-            case REQUEST_ENABLE_LOC:
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    Toast.makeText(this, "Permission Granted!", Toast.LENGTH_SHORT).show();
-                } else {
-                    Toast.makeText(this, "Permission Denied!", Toast.LENGTH_SHORT).show();
-                }
-        }
-    } */
 
     private BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
