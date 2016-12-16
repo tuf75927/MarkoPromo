@@ -3,58 +3,44 @@ package edu.temple.markopromo;
 import android.content.Context;
 
 import java.io.FileOutputStream;
+import java.io.Serializable;
 import java.util.Date;
 
-public class PromoMessage {
-    private Date dateReceived;
-    private String fileName;
-    private Context context;
+public class PromoMessage implements Serializable {
+    private String filename;
+    private String datetime;
+    private String location;
 
-    //public PromoMessage() {
-    //}
-
-    public PromoMessage(String fileName, Context context) {
-        this.dateReceived = new Date();
-        dateReceived.setTime(System.currentTimeMillis());
-        this.fileName = fileName;
-        this.context = context;
+    public PromoMessage() {
     }
 
-    public PromoMessage(Date dateReceived, String fileName, Context context) {
-        this.dateReceived = dateReceived;
-        this.fileName = fileName;
-        this.context = context;
+    public PromoMessage(String filename, String datetime) {
+        this.filename = filename;
+        this.datetime = datetime;
+        this.location = "Unknown Location";
     }
 
-    public Date getDateReceived() {
-        return dateReceived;
+    public PromoMessage(String filename, String datetime, String location) {
+        this.filename = filename;
+        this.datetime = datetime;
+        this.location = location;
     }
 
-    public String getFileName() {
-        return fileName;
+    public String getDatetime() {
+        return datetime;
     }
 
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
+    public void setDatetime(String datetime) { this.datetime = datetime; }
+
+    public String getFilename() {
+        return filename;
     }
 
-    public boolean save() {
-        String test = "testing 123";
-        boolean success = false;
-
-        try {
-            FileOutputStream fos = context.openFileOutput(fileName, Context.MODE_PRIVATE);
-            fos.write(test.getBytes());
-            fos.close();
-            success = true;
-        } catch(Exception e) {
-            e.printStackTrace();
-        } finally {
-            return success;
-        }
+    public void setFilename(String filename) {
+        this.filename = filename;
     }
 
-    public boolean delete(String fileName) {
-        return context.deleteFile(fileName);
-    }
+    public String getLocation() { return location; }
+
+    public void setLocation(String location) { this.location = location; }
 }

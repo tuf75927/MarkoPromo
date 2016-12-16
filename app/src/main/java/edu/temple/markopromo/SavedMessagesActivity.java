@@ -17,6 +17,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
@@ -43,17 +44,31 @@ import com.amazonaws.mobileconnectors.s3.transferutility.TransferState;
 import com.amazonaws.mobileconnectors.s3.transferutility.TransferUtility;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.location.places.PlaceLikelihood;
+import com.google.android.gms.location.places.PlaceLikelihoodBuffer;
+import com.google.android.gms.location.places.Places;
+import com.google.gson.Gson;
 
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
-public class SavedMessagesActivity extends AppCompatActivity {
+public class SavedMessagesActivity extends AppCompatActivity implements GoogleApiClient.OnConnectionFailedListener {
 
     private BluetoothAdapter mBluetoothAdapter;
+    private static GoogleApiClient mGoogleApiClient;
 
     private final static int REQUEST_ENABLE_BT = 1;
     private final static int REQUEST_ENABLE_LOC = 2;
@@ -61,12 +76,22 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
     private static final String bucket = "mpmsg";
     public static final String NEW_MSG_LIST_KEY = "new_msg_list_key";
+    public static final String NEW_PM_LIST_KEY = "new_pm_list_key";
+    public static final String LOC_MAP_KEY = "loc_map_key";
+    public static final String TIME_MAP_KEY = "time_map_key";
 
-    protected ArrayList<String> newMessageList;
-    protected ArrayList<String> savedMessageList;
-    protected ArrayList<String> toBeDeletedNewList;
-    protected ArrayList<String> toBeDeletedSavedList;
+    protected static ArrayList<String> newMessageList;
+    protected static ArrayList<String> savedMessageList;
+    protected static ArrayList<String> toBeDeletedNewList;
+    protected static ArrayList<String> toBeDeletedSavedList;
+
+    //protected ArrayList<PromoMessage> promoMessageList;
+
+    private static HashMap<String, String> locationMap;
+    private static HashMap<String, String> timestampMap;
+
     public static File directory;
+    protected static String tempLocation;
 
     //protected GridView newMsgGridView;
     //protected GridView savedMsgGridView;
@@ -89,19 +114,35 @@ public class SavedMessagesActivity extends AppCompatActivity {
             finish();
         }
 
+        mGoogleApiClient = new GoogleApiClient
+                .Builder(this)
+                .addApi(Places.GEO_DATA_API)
+                .addApi(Places.PLACE_DETECTION_API)
+                .enableAutoManage(this, this)
+                .build();
+
+        //getLocation(this);
+
         IntentFilter ifilter = new IntentFilter();
         ifilter.addAction("ACTION_BROADCAST_FILENAME");
         registerReceiver(receiver, ifilter);
 
         directory = getFilesDir();
 
-        newMessageList = new ArrayList<String>();
-        savedMessageList = new ArrayList<String>();
-        toBeDeletedNewList = new ArrayList<String>();
-        toBeDeletedSavedList = new ArrayList<String>();
+        newMessageList = new ArrayList<>();
+        savedMessageList = new ArrayList<>();
+        toBeDeletedNewList = new ArrayList<>();
+        toBeDeletedSavedList = new ArrayList<>();
+
+        //promoMessageList = new ArrayList<PromoMessage>();
+        locationMap = new HashMap<>();
+        timestampMap = new HashMap<>();
 
         if (savedInstanceState != null) {
+            //promoMessageList = (ArrayList<PromoMessage>) savedInstanceState.getSerializable(NEW_PM_LIST_KEY);
             newMessageList = savedInstanceState.getStringArrayList(NEW_MSG_LIST_KEY);
+            locationMap = (HashMap) savedInstanceState.getSerializable(LOC_MAP_KEY);
+            timestampMap = (HashMap) savedInstanceState.getSerializable(TIME_MAP_KEY);
         } else {
             populateNewMessageList();
         }
@@ -116,12 +157,14 @@ public class SavedMessagesActivity extends AppCompatActivity {
         deleteButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if(toBeDeletedNewList != null) {
-                    for(String s: toBeDeletedNewList) {
+                if (toBeDeletedNewList != null) {
+                    for (String s : toBeDeletedNewList) {
                         int i = 0;
-                        for(String t : newMessageList) {
-                            if(s.equalsIgnoreCase(t)) {
+                        for (String t : newMessageList) {
+                            if (s.equalsIgnoreCase(t)) {
                                 newMessageList.remove(i);
+                                locationMap.remove(t);
+                                timestampMap.remove(t);
                                 break;
                             }
                             i++;
@@ -132,10 +175,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
                     //recreate();
                 }
 
-                if(toBeDeletedSavedList != null) {
-                    for(String s : toBeDeletedSavedList) {
+                if (toBeDeletedSavedList != null) {
+                    for (String s : toBeDeletedSavedList) {
                         deleteFile(s);
-
+                        locationMap.remove(s);
+                        timestampMap.remove(s);
                     }
                     populateSavedMessageList();
                     Log.i("deleteButtonSaved", savedMessageList.toString());
@@ -174,6 +218,9 @@ public class SavedMessagesActivity extends AppCompatActivity {
         //newMsgCheckboxAdapter.notifyDataSetChanged();
         populateSavedMessageList();
         //savedMsgCheckboxAdapter.notifyDataSetChanged();
+        //getHashMapPref(this, LOC_MAP_KEY);
+        //getHashMapPref(this, TIME_MAP_KEY);
+
         Log.i("initGrid", "onResume");
         initGridviews(newMessageList, savedMessageList);
     }
@@ -183,6 +230,10 @@ public class SavedMessagesActivity extends AppCompatActivity {
         super.onPause();
 
         setStringArrayPref(this, NEW_MSG_LIST_KEY, newMessageList);
+        //setHashMapPref(this, LOC_MAP_KEY, locationMap);
+        //setHashMapPref(this, TIME_MAP_KEY, timestampMap);
+        //setPromoMessageArrayPref(this, NEW_PM_LIST_KEY, promoMessageList);
+        //setHashMapPref(this, LOC_MAP_KEY, locationMap);
 
         Log.i("initGrid", "setStringArrayPref " + newMessageList.toString());
 
@@ -214,8 +265,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
     }
 
     private void populateNewMessageList() {
-        for(String s : getStringArrayPref(this, NEW_MSG_LIST_KEY)) {
-            if(isNewPromo(s))
+        for (String s : getStringArrayPref(this, NEW_MSG_LIST_KEY)) {
+            if (isNewPromo(s))
                 newMessageList.add(s);
         }
     }
@@ -225,7 +276,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
         String[] fileList = this.fileList();
 
-        for(String s : fileList) {
+        for (String s : fileList) {
             if (!s.equals("instant-run"))
                 savedMessageList.add(s);
         }
@@ -234,34 +285,113 @@ public class SavedMessagesActivity extends AppCompatActivity {
     private void deleteAllMessages() {
         String[] fileList = this.fileList();
 
-        for(String s : fileList) {
+        for (String s : fileList) {
             deleteFile(s);
         }
     }
 
-    private void handleNewMessage(String filename) {
-        newMessageList.add(filename);
-        //newMsgCheckboxAdapter.notifyDataSetChanged();
-        Log.i("initGrid", "handleNewMessage");
-        initGridviews(newMessageList, savedMessageList);
+    private void handleNewMessage(String filename, String datetime) {
 
-        setStringArrayPref(this, NEW_MSG_LIST_KEY, newMessageList);
+        newMessageList.add(filename);
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+
+        final String f = filename;
+        final String t = datetime;
+
+        PendingResult<PlaceLikelihoodBuffer> result = Places.PlaceDetectionApi.getCurrentPlace(mGoogleApiClient, null);
+        result.setResultCallback(new ResultCallback<PlaceLikelihoodBuffer>() {
+            @Override
+            public void onResult(PlaceLikelihoodBuffer likelyPlaces) {
+                String location = "Unknown location";
+                double maxLikelihood = 0;
+                for (PlaceLikelihood placeLikelihood : likelyPlaces) {
+                    Log.i("LOCDEBUG", String.format("Place '%s' has likelihood: %g",
+                            placeLikelihood.getPlace().getName(),
+                            placeLikelihood.getLikelihood()));
+                    if(placeLikelihood.getLikelihood() >= maxLikelihood) {
+                        maxLikelihood = placeLikelihood.getLikelihood();
+                        location = placeLikelihood.getPlace().getName().toString();
+                    }
+                }
+                likelyPlaces.release();
+                Log.i("LOCDEBUG", "most likely location = " + location);
+
+                //PromoMessage pm = new PromoMessage(f, t, location);
+                //Log.i("LOCDEBUG", "new PM: " + f + ", " + t + ", " + location);
+                //promoMessageList.add(pm);
+
+                locationMap.put(f, location);
+                timestampMap.put(f, t);
+
+                Log.i("initGrid", "handleNewMessage");
+                initGridviews(newMessageList, savedMessageList);
+
+                setStringArrayPref(getApplicationContext(), NEW_MSG_LIST_KEY, newMessageList);
+            }
+        });
     }
 
-    protected boolean isNewPromo(String filename) {
+    protected static boolean isNewPromo(String filename) {
         boolean result = true;
 
-        for(String s : newMessageList) {
-            if(s.equalsIgnoreCase(filename))
+        for (String s : newMessageList) {
+            if (s.equalsIgnoreCase(filename))
                 result = false;
         }
 
-        for(String s : savedMessageList) {
-            if(s.equalsIgnoreCase(filename))
+        for (String s : savedMessageList) {
+            if (s.equalsIgnoreCase(filename))
                 result = false;
         }
 
         return result;
+    }
+
+    protected static String getLocation(Context context) {
+        String f;
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return null;
+        }
+
+        PendingResult<PlaceLikelihoodBuffer> result = Places.PlaceDetectionApi.getCurrentPlace(mGoogleApiClient, null);
+        result.setResultCallback(new ResultCallback<PlaceLikelihoodBuffer>() {
+            @Override
+            public void onResult(PlaceLikelihoodBuffer likelyPlaces) {
+                String location = "Unknown location";
+                double maxLikelihood = 0;
+                for (PlaceLikelihood placeLikelihood : likelyPlaces) {
+                    Log.i("LOCDEBUG", String.format("Place '%s' has likelihood: %g",
+                            placeLikelihood.getPlace().getName(),
+                            placeLikelihood.getLikelihood()));
+                    if(placeLikelihood.getLikelihood() >= maxLikelihood) {
+                        maxLikelihood = placeLikelihood.getLikelihood();
+                        location = placeLikelihood.getPlace().getName().toString();
+                    }
+                }
+                likelyPlaces.release();
+                Log.i("LOCDEBUG", "most likely location = " + location);
+                tempLocation = location;
+            }
+        });
+
+        return tempLocation;
     }
 
     private void downloadMessage(final String filename) {
@@ -360,6 +490,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
             if(resultCode == DELETE_RESULT){
                 String fileToDelete = data.getStringExtra("fileToDelete");
                 savedMessageList.remove(fileToDelete);
+                locationMap.remove(fileToDelete);
+                timestampMap.remove(fileToDelete);
                 //savedMsgCheckboxAdapter.notifyDataSetChanged();
                 Log.i("initGrid", "onActivityResult");
                 initGridviews(newMessageList, savedMessageList);
@@ -367,6 +499,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
         }
     }
 
+    /*
     private void showLocationStatePermission() {
         int permissionCheck = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_FINE_LOCATION);
@@ -416,15 +549,19 @@ public class SavedMessagesActivity extends AppCompatActivity {
                     Toast.makeText(this, "Permission Denied!", Toast.LENGTH_SHORT).show();
                 }
         }
-    }
+    } */
 
     private BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals("ACTION_BROADCAST_FILENAME")){
-                String filename = intent.getStringExtra("filename");
-                if(isNewPromo(filename)) {
-                    handleNewMessage(filename);
+                String fn = intent.getStringExtra("filename");
+                String ts = intent.getStringExtra("timestamp");
+
+                Log.i("LOCDEBUG", "timestamp = " + ts);
+
+                if(isNewPromo(fn)) {
+                    handleNewMessage(fn, ts);
                     if(!isActivityRunning)
                         issueNotification();
                 }
@@ -436,9 +573,11 @@ public class SavedMessagesActivity extends AppCompatActivity {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = prefs.edit();
         JSONArray a = new JSONArray();
-        for (int i = 0; i < values.size(); i++) {
+
+        for(int i = 0; i < values.size(); i++) {
             a.put(values.get(i));
         }
+
         if (!values.isEmpty()) {
             editor.putString(key, a.toString());
         } else {
@@ -472,12 +611,48 @@ public class SavedMessagesActivity extends AppCompatActivity {
         return urls;
     }
 
+    private static void setHashMapPref(Context context, String key, HashMap map) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor editor = prefs.edit();
+
+        Gson gson = new Gson();
+        String json = gson.toJson(map);
+
+        editor.putString(key, json);
+        editor.commit();
+
+        Log.i("DEBUGMAP", "JSON string: " + json);
+    }
+
+    private static void getHashMapPref(Context context, String key) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+
+        Gson gson = new Gson();
+        String json = prefs.getString(key, null);
+        if(json != null) {
+            if (key.equals(LOC_MAP_KEY)) {
+                locationMap.clear();
+                locationMap = gson.fromJson(json, HashMap.class);
+            } else if (key.equals(TIME_MAP_KEY)) {
+                timestampMap.clear();
+                timestampMap = gson.fromJson(json, HashMap.class);
+            }
+        }
+
+    }
+
     @Override
     protected void onSaveInstanceState (Bundle outState) {
         outState.putStringArrayList(NEW_MSG_LIST_KEY, newMessageList);
+        //outState.putSerializable(NEW_MSG_LIST_KEY, newPromoMessageList);
+        outState.putSerializable(LOC_MAP_KEY, locationMap);
+        outState.putSerializable(TIME_MAP_KEY, timestampMap);
         super.onSaveInstanceState(outState);
+    }
 
-        Log.i("StateSaved", newMessageList.toString());
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        Log.i("LOCDEBUG", "connection failed");
     }
 
     public class SavedMsgCheckboxAdapter extends ArrayAdapter {
@@ -527,7 +702,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
             final TextView textView = new TextView(context);
 
-            textView.setText(list[position].toString());
+            final String f = list[position].toString();
+            textView.setText(getDisplayName(f));
             textView.setTextSize(20);
             //textView.setId(position);
             textView.setClickable(true);
@@ -541,7 +717,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
                 public void onClick(View v) {
                     toBeDeletedSavedList.clear();
                     toBeDeletedNewList.clear();
-                    launchDisplayMessageActivity(textView.getText().toString());
+                    launchDisplayMessageActivity(f);
                 }
             });
 
@@ -603,7 +779,8 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
             final TextView textView = new TextView(context);
 
-            textView.setText(list[position].toString());
+            final String f = list[position].toString();
+            textView.setText(getDisplayName(f));
             textView.setTextSize(20);
             textView.setId(position);
             textView.setClickable(true);
@@ -617,7 +794,7 @@ public class SavedMessagesActivity extends AppCompatActivity {
                 public void onClick(View v) {
                     toBeDeletedSavedList.clear();
                     toBeDeletedNewList.clear();
-                    downloadMessage(textView.getText().toString());
+                    downloadMessage(f);
                 }
             });
 
@@ -630,6 +807,24 @@ public class SavedMessagesActivity extends AppCompatActivity {
 
             return linearLayout;
         }
+    }
+
+    private String getDisplayName(String filename) {
+        String result = "Metadata not found";
+
+        if(locationMap.containsKey(filename)) {
+            result = locationMap.get(filename) + ", " + timestampMap.get(filename);
+        }
+
+        return result;
+
+        /*
+        for(PromoMessage pm : promoMessageList) {
+            if(pm.getFilename().equalsIgnoreCase(filename)) {
+                result = pm.getLocation() + ", " + pm.getDatetime();
+            }
+        }
+        return result;*/
     }
 
     private void issueNotification() {

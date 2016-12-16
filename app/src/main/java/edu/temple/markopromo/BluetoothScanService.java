@@ -20,7 +20,10 @@ import android.os.IBinder;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class BluetoothScanService extends IntentService {
@@ -107,10 +110,20 @@ public class BluetoothScanService extends IntentService {
                 Log.i("matches", "true");
                 filename = parseFileName(byteArray);
 
-                Intent broadcastIntent = new Intent();
-                broadcastIntent.setAction("ACTION_BROADCAST_FILENAME");
-                broadcastIntent.putExtra("filename", filename);
-                sendBroadcast(broadcastIntent);
+                if(SavedMessagesActivity.isNewPromo(filename)) {
+                    Timestamp stamp = new Timestamp(System.currentTimeMillis());
+                    Date date = new Date(stamp.getTime());
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm");
+                    String formattedDate = dateFormat.format(date);
+                    //String location = SavedMessagesActivity.getLocation(getApplicationContext());
+
+                    Intent broadcastIntent = new Intent();
+                    broadcastIntent.setAction("ACTION_BROADCAST_FILENAME");
+                    broadcastIntent.putExtra("filename", filename);
+                    broadcastIntent.putExtra("timestamp", formattedDate);
+                    //broadcastIntent.putExtra("location", location);
+                    sendBroadcast(broadcastIntent);
+                }
             }
         }
 
